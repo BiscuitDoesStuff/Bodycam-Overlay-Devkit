@@ -401,7 +401,12 @@ that's what `set_rowname`/`replace_payload` do. `game_api.py` calls
 `backup_save()` before every write for exactly this reason: it's a raw
 binary patch, not a round-tripped re-serialization, so a parsing mistake on
 an unexpected save-file shape is a real risk worth having a `.backup-*`
-copy for.
+copy for. `backup_save()` keeps only the 20 most recent backups (pruning
+older ones on each call) so they don't accumulate forever, and the Loadout
+Editor tab's "Restore Backup..." button (`api.list_backups()` /
+`api.restore_backup()`) lets you pick one back without touching Explorer --
+restoring itself takes a fresh backup of whatever it's about to overwrite
+first, so it's never a one-way trip.
 
 ### 5.3 Why some data is hand-maintained (`families.json`)
 
