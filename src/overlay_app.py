@@ -1627,7 +1627,9 @@ class AboutTab(ttk.Frame):
                  muted=True, justify="left").pack(anchor="w", padx=PAD_LG, pady=(0, PAD_LG))
 
         ui.label(self, text="Docs: docs/DOCUMENTATION.md in the project folder explains the Console/"
-                             "Shell tabs, the plugin format, and troubleshooting.",
+                             "Shell tabs, the plugin format, and troubleshooting. "
+                             "knowledge_base/CAPABILITIES.md covers what's actually in the game -- "
+                             "content tables and what's confirmed safe vs. confirmed to crash.",
                  muted=True, wraplength=600, justify="left").pack(anchor="w", padx=PAD_LG)
 
 

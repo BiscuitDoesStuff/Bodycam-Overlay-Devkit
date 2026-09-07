@@ -19,12 +19,18 @@ BodycamOverlay.spec     PyInstaller spec for the same build, if you run it direc
 docs/
   DOCUMENTATION.md      Console/Shell/Plugins reference, troubleshooting, internals
 
+knowledge_base/
+  CAPABILITIES.md       What's actually in the game (DataTables, reflection surface)
+                        and a running list of what's confirmed safe vs. confirmed to
+                        crash -- see its own README.md for the harvester scripts
+
 community/
   buttons/              Shared Saved Command Buttons exports (.json)
   plugins/              Shared Plugin files (.json)
 
 src/
   overlay_app.py         Tkinter UI -- all tabs
+  ui_theme.py             Central theme (palette/fonts/spacing) + widget factories
   game_api.py            High-level API: bridges live Lua calls + save-file edits
   bridge_client.py       Talks to ClaudeBridge (file-based RPC into the game)
   gvas2.py               Loadout.sav binary format reader/writer
@@ -128,16 +134,19 @@ after installing the mod.
 
 **Game Speed tab** — Slomo control plus quick 3x speed / reset buttons.
 
+**Saved Command Buttons tab** — every snippet you've saved from the Console
+tab, grouped by category, as a scrollable list of Run Once buttons and
+Toggle checkboxes. Each category header has a **▶ Run All** that runs every
+button in that group once, in the order they're saved (a toggle-mode button
+run this way is always turned ON). Supports per-button delete and
+recategorize, and **Import** / **Export All** / **Export Selected** (via a
+checkbox next to each button) using JSON files, so you can share a set of
+commands with someone else — categories survive import/export.
+
 **Console tab** — a raw Lua console into the live game process, with saved
 history and a "Save as Button..." action. See
 **[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)** §1 for exactly how this
 works, what globals are available, and its safety model.
-
-**Saved Command Buttons tab** — every snippet you've saved from the Console
-tab, as a scrollable list of Run Once buttons and Toggle checkboxes. Supports
-per-button delete, and **Import** / **Export All** / **Export Selected**
-(via a checkbox next to each button) using JSON files, so you can share a
-set of commands with someone else.
 
 **Plugins tab** — load a shareable JSON "plugin" file (same shape as a Saved
 Command Buttons export, plus a name and optional section labels/dividers)
@@ -205,6 +214,20 @@ does the same build if you'd rather invoke PyInstaller directly.
   `SpawnActor`, most likely GAS-related initialization the game's own item
   spawn path does that a raw `SpawnActor` skips). There is no Spawn tab for
   this reason; don't reintroduce raw actor spawning without solving that.
+- **Rapid repeated `host_and_travel` calls in a short window can wedge the
+  game's own travel system** — observed live: several travel attempts fired
+  within a few minutes eventually caused even an already-proven mode/map
+  combo to stop engaging at all (the level and gamemode both just stayed
+  put). Not fully root-caused; the practical takeaway is to space out
+  Load Custom Match / Cycle attempts rather than firing several back to
+  back, and a game restart reliably clears it. See
+  `knowledge_base/CAPABILITIES.md` for the full incident notes.
+- **Zombie, Pit, OnlyPistol, and Training are not real hostable modes** in
+  the current build — their gamemode classes exist and are listed (under
+  "NO CONTENT" in the Gamemode picker) but there's no actual playable
+  content behind them. Don't expect "Discover More Gamemodes..." to turn up
+  a working mode from this specific set; it's there for genuinely new
+  additions in future game updates.
 
 ## License
 
