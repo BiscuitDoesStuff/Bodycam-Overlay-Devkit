@@ -424,8 +424,11 @@ class HostTab(ttk.Frame):
 
         # Roster -- connected players' names, read-only, via the base-engine
         # APlayerState:GetPlayerName() (safe to assume it exists on any UE
-        # game). Team assignment isn't shown: no PlayerState property for it
-        # has been confirmed live yet.
+        # game), plus a per-connected-player team/K/D/score block (Lobby only)
+        # via get_lobby_roster() -- see that function's docstring: it's
+        # untested against real multiple players, shown by connection slot
+        # rather than matched to the names above, since there's no safe way
+        # to correlate the two lists without touching a field known to crash.
         self.roster_label_var = tk.StringVar(value="Roster")
         self.roster_label = ui.label(right, textvariable=self.roster_label_var, bg=PANEL, bold=True)
         self.roster_label.pack(anchor="w", padx=PAD, pady=(0, 0))
@@ -797,14 +800,26 @@ class HostTab(ttk.Frame):
 
     def _refresh_roster(self):
         def work():
-            return api.get_player_roster()
+            return api.get_player_roster(), api.get_lobby_roster()
 
-        def done(names):
+        def done(result):
+            names, lobby_info = result
             self.roster_list.delete(0, tk.END)
             if not names:
                 self.roster_list.insert(tk.END, "(none found)")
             for n in names:
                 self.roster_list.insert(tk.END, n)
+            if lobby_info:
+                # Untested with real multiple players as of this writing (see
+                # get_lobby_roster()'s docstring) -- shown by connection index,
+                # NOT matched up with the names above (no safe shared key to
+                # correlate them without touching fields known to crash).
+                self.roster_list.insert(tk.END, "--- Lobby team/K-D-S (by slot, unmatched to names) ---")
+                for entry in lobby_info:
+                    line = (f"#{entry.get('index', '?')}: team={entry.get('team', '?')} "
+                            f"K={entry.get('kills', '?')} D={entry.get('deaths', '?')} "
+                            f"S={entry.get('score', '?')}")
+                    self.roster_list.insert(tk.END, line)
             self._set_roster_label(len(names))
 
         self.app.runner.run(work, done, self.app.on_error("roster check failed"))

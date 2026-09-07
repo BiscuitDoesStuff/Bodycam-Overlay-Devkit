@@ -423,6 +423,16 @@ Safety properties, all load-bearing (not decorative):
   — but that only covers Lua-level errors. A bad native call or a
   touched-invalid-UObject can still crash the real game process. There is
   no sandbox.
+- **`bridge_client._send()` serializes concurrent Python-side callers with a
+  `threading.Lock()`** — added after a real race (2026-09-07, see
+  `knowledge_base/CAPABILITIES.md`): two `AsyncRunner` threads (e.g. two
+  "Refresh ..." buttons clicked close together, or a tab's own init
+  auto-refresh overlapping a manual one) writing `req.tmp` at the same
+  moment could throw a `PermissionError`, or worse, silently clobber each
+  other's request before the game ever read it. `req.txt`/`resp.txt` are a
+  single slot on the game side too (the `busy` flag above), so the fix
+  makes the Python side take turns the same way, rather than trying to make
+  the shared files themselves collision-proof.
 
 ### 5.2 GVAS save-file editing (`gvas2.py`)
 

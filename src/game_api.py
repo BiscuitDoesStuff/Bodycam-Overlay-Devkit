@@ -534,6 +534,85 @@ return table.concat(out, '\n')
     return [l.strip() for l in body.splitlines() if l.strip()]
 
 
+def get_lobby_roster(timeout=15):
+    """Per-connected-player team/kills/deaths/score/rank via
+    GameMode:GetPlayerConnected(TArray<FSTR_PCInfo>&) -- the array version of
+    get_match_info()'s my_* fields (which use the single-entry GetPcInfo).
+    Lobby-only, same reason as everything else declared on AGM_Bodycam_C
+    (see get_match_info()'s docstring) -- returns [] outside the Lobby.
+
+    UNTESTED WITH MULTIPLE PLAYERS (2026-09-07) -- only ever exercised solo,
+    where the call succeeds (`ok=true`) but the array legitimately comes back
+    with zero entries (there's no one else "connected" to list). The
+    per-entry field extraction below has never actually run against a
+    populated array.
+
+    Design rationale for why this is still safe to ship untested: a single
+    out-param whose value IS an array is assumed to flatten the same way
+    GetPcInfo's single out-param struct flattens directly into the passed
+    table (confirmed live) -- i.e. `t[1], t[2], ...` are the individual
+    FSTR_PCInfo entries, not nested under a 'PlayerConnected' key. This is an
+    educated guess, not a confirmed fact. If it's wrong, `ipairs(t)` simply
+    yields zero iterations (Lua's `ipairs` stops at the first missing integer
+    key rather than erroring), so a wrong guess produces the same empty
+    result as "genuinely no one else connected" -- there's no path here that
+    errors or crashes from the shape being different than expected. Per-entry
+    field extraction reuses get_match_info()'s exact safe-field allowlist
+    (Team, Stats.Kill/Death/Score/RankName by name PREFIX) and the exact same
+    exclusions (never PC/Character/SteamID/SkinInfo/BadgeInfo, never
+    KillInfo) for the same reasons -- see that function's docstring and
+    knowledge_base/CAPABILITIES.md's crash list. Re-verify this docstring
+    against reality the first time it actually runs with 2+ connected
+    players, and correct the flattening assumption above if the real shape
+    turns out to be different."""
+    lua = r"""
+local gm = (FindAllOf('GameModeBase') or {})[1]
+if not gm then return 'NOGM' end
+local out = {}
+pcall(function()
+    local t = {}
+    gm:GetPlayerConnected(t)
+    for i, entry in ipairs(t) do
+        if type(entry) == 'table' then
+            local fields = {}
+            for k, v in pairs(entry) do
+                if k:find('^Team_') then
+                    fields[#fields+1] = 'team=' .. tostring(v)
+                elseif k:find('^Stats_') and type(v) == 'table' then
+                    for sk, sv in pairs(v) do
+                        if sk:find('^Kill_') then fields[#fields+1] = 'kills=' .. tostring(sv)
+                        elseif sk:find('^Death_') then fields[#fields+1] = 'deaths=' .. tostring(sv)
+                        elseif sk:find('^Score_') then fields[#fields+1] = 'score=' .. tostring(sv)
+                        elseif sk:find('^RankName_') then
+                            local ok2, rn = pcall(function() return sv:ToString() end)
+                            fields[#fields+1] = 'rank=' .. (ok2 and rn or 'n/a')
+                        end
+                    end
+                end
+            end
+            out[#out+1] = tostring(i) .. '|' .. table.concat(fields, ',')
+        end
+    end
+end)
+return table.concat(out, '\n')
+"""
+    body = bc.run_lua(lua, timeout=timeout).strip()
+    if body in ("NOGM", ""):
+        return []
+    roster = []
+    for line in body.splitlines():
+        if "|" not in line:
+            continue
+        idx, rest = line.split("|", 1)
+        entry = {"index": idx}
+        for pair in rest.split(","):
+            if "=" in pair:
+                k, v = pair.split("=", 1)
+                entry[k] = v
+        roster.append(entry)
+    return roster
+
+
 # Candidate class paths for gamemodes DT_GamemodeInfo/DT_GameModeData list
 # (Zombie, Pit, Training, OnlyPistol) that aren't in gamemodes.json -- the 7
 # modes already there all live at /Game/GM/Gamemode/GM_<Name>.GM_<Name>_C, so
