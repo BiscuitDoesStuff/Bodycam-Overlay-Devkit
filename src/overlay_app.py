@@ -291,10 +291,15 @@ def render_command_widgets(parent, app, widgets, on_delete=None, selection_vars=
 
 
 class HostTab(ttk.Frame):
-    # Fixed iids for the two Treeview category rows -- distinct from any real
-    # map name, so a selection is a category iff it's one of these two.
+    # Fixed iids for Treeview category rows -- distinct from any real map/mode
+    # name (the \x00 prefix can't appear in one), so a selection is a category
+    # iff it's one of these.
     CAT_PLAYLIST = "\x00cat_playlist"
     CAT_DEV = "\x00cat_dev"
+    CAT_UNCONFIRMED_MAP = "\x00cat_unconfirmed_map"
+    CAT_GM_WORKING = "\x00cat_gm_working"
+    CAT_GM_UNTESTED = "\x00cat_gm_untested"
+    CAT_GM_BROKEN = "\x00cat_gm_broken"
 
     def __init__(self, parent, app):
         super().__init__(parent)
@@ -324,38 +329,58 @@ class HostTab(ttk.Frame):
         map_scroll = ui.scrollbar(map_frame)
         map_scroll.pack(side="right", fill="y")
         self.map_tree = ui.treeview(map_frame, show="tree", selectmode="browse",
-                                     height=12, yscrollcommand=map_scroll.set)
+                                     height=9, yscrollcommand=map_scroll.set)
         self.map_tree.column("#0", stretch=True)
         self.map_tree.pack(side="left", fill="both", expand=True)
         map_scroll.config(command=self.map_tree.yview)
+        self.map_tree.tag_configure("map_unconfirmed", foreground=MUTED)
         self.map_tree.bind("<Double-Button-1>", self._on_map_double_click)
         self.map_tree.bind("<Return>", self._on_map_double_click)
+        self.map_tree.bind("<<TreeviewSelect>>", self._on_map_select)
+
+        self.map_note_var = tk.StringVar()
+        ui.label(left, textvariable=self.map_note_var, muted=True, wraplength=400,
+                 justify="left").pack(anchor="w", fill="x", pady=(PAD_SM - 2, 0))
+
+        ui.label(left, text="Gamemode", bold=True).pack(anchor="w", pady=(PAD, 0))
+        gm_frame = ui.frame(left)
+        gm_frame.pack(fill="x", pady=(PAD_SM, 0))
+        gm_scroll = ui.scrollbar(gm_frame)
+        gm_scroll.pack(side="right", fill="y")
+        self.gamemode_tree = ui.treeview(gm_frame, show="tree", selectmode="browse",
+                                          height=5, yscrollcommand=gm_scroll.set)
+        self.gamemode_tree.column("#0", stretch=True)
+        self.gamemode_tree.pack(side="left", fill="x", expand=True)
+        gm_scroll.config(command=self.gamemode_tree.yview)
+        self.gamemode_tree.tag_configure("gm_working", foreground=FG)
+        self.gamemode_tree.tag_configure("gm_untested", foreground=MUTED)
+        self.gamemode_tree.tag_configure("gm_broken", foreground=MUTED)
+        self.gamemode_tree.bind("<<TreeviewSelect>>", self._on_gamemode_select)
+        self.gamemode_tree.bind("<Double-Button-1>", self._on_gamemode_double_click)
+
+        self.gamemode_note_var = tk.StringVar()
+        ui.label(left, textvariable=self.gamemode_note_var, muted=True, wraplength=400,
+                 justify="left").pack(anchor="w", fill="x", pady=(PAD_SM - 2, 0))
 
         row = ui.frame(left)
         row.pack(fill="x", pady=(PAD, 0))
 
-        ui.label(row, text="Gamemode").grid(row=0, column=0, sticky="w")
-        self.mode_var = tk.StringVar(value=list(self.gamemodes.keys())[0])
-        self.mode_cb = ttk.Combobox(row, textvariable=self.mode_var, values=list(self.gamemodes.keys()), state="readonly")
-        self.mode_cb.grid(row=0, column=1, sticky="ew", padx=PAD_SM + 2)
-        self.mode_cb.bind("<<ComboboxSelected>>", self._on_mode_change)
-
-        ui.label(row, text="Cap").grid(row=1, column=0, sticky="w", pady=(PAD_SM + 2, 0))
+        ui.label(row, text="Cap").grid(row=0, column=0, sticky="w")
         self.cap_var = tk.IntVar(value=7)
         ui.spinbox(row, from_=1, to=64, textvariable=self.cap_var, width=6).grid(
-            row=1, column=1, sticky="w", padx=PAD_SM + 2, pady=(PAD_SM + 2, 0))
+            row=0, column=1, sticky="w", padx=PAD_SM + 2)
 
-        ui.label(row, text="Team Cap").grid(row=2, column=0, sticky="w", pady=(PAD_SM + 2, 0))
+        ui.label(row, text="Team Cap").grid(row=1, column=0, sticky="w", pady=(PAD_SM + 2, 0))
         self.team_var = tk.IntVar(value=1)
         self.team_spin = ui.spinbox(row, from_=1, to=32, textvariable=self.team_var, width=6)
-        self.team_spin.grid(row=2, column=1, sticky="w", padx=PAD_SM + 2, pady=(PAD_SM + 2, 0))
+        self.team_spin.grid(row=1, column=1, sticky="w", padx=PAD_SM + 2, pady=(PAD_SM + 2, 0))
 
         self.private_var = tk.BooleanVar(value=False)
         ui.checkbutton(row, text="Private", variable=self.private_var).grid(
-            row=3, column=0, sticky="w", pady=(PAD_SM + 2, 0))
+            row=2, column=0, sticky="w", pady=(PAD_SM + 2, 0))
         self.bots_var = tk.BooleanVar(value=True)
         ui.checkbutton(row, text="Bots", variable=self.bots_var).grid(
-            row=3, column=1, sticky="w", pady=(PAD_SM + 2, 0))
+            row=2, column=1, sticky="w", pady=(PAD_SM + 2, 0))
 
         row.columnconfigure(1, weight=1)
 
@@ -405,23 +430,30 @@ class HostTab(ttk.Frame):
             fill="x", padx=PAD, pady=(0, PAD))
 
         self._populate_map_tree()
+        self._populate_gamemode_tree()
         self._apply_saved_state()
         self._refresh_state()
 
     def _populate_map_tree(self, filter_text=""):
-        """Rebuilds the map tree under two real category rows (Playlist /
-        Dev-Unreleased) instead of the old single flat list with a fake
-        "--- non-playlist / dev maps ---" text row acting as a divider --
-        that row was itself a selectable listbox entry that _selected_map()
-        had to special-case by string prefix. A category row here is a
-        distinct, non-pickable tree node (see CAT_PLAYLIST/CAT_DEV)."""
+        """Rebuilds the map tree under three real category rows (Playlist /
+        Dev-Unreleased / Unconfirmed) instead of the old single flat list
+        with a fake "--- non-playlist / dev maps ---" text row acting as a
+        divider -- that row was itself a selectable listbox entry that
+        _selected_map() had to special-case by string prefix. A category row
+        here is a distinct, non-pickable tree node. Every map in maps.json is
+        shown regardless of status=='unconfirmed' -- nothing about the game's
+        own content is hidden, the category just tells you which ones haven't
+        actually been reached live yet (see maps.json's own notes)."""
         self.map_tree.delete(*self.map_tree.get_children())
         q = filter_text.lower().strip()
-        playlist = sorted(n for n, i in self.maps.items() if i["playlist"])
-        dev = sorted(n for n, i in self.maps.items() if not i["playlist"])
+        unconfirmed = sorted(n for n, i in self.maps.items() if i.get("status") == "unconfirmed")
+        playlist = sorted(n for n, i in self.maps.items() if i["playlist"] and i.get("status") != "unconfirmed")
+        dev = sorted(n for n, i in self.maps.items()
+                     if not i["playlist"] and i.get("status") != "unconfirmed")
         if q:
             playlist = [n for n in playlist if q in n.lower()]
             dev = [n for n in dev if q in n.lower()]
+            unconfirmed = [n for n in unconfirmed if q in n.lower()]
 
         self.map_tree.insert("", "end", iid=self.CAT_PLAYLIST, open=True, tags=("category",),
                               text=f"PLAYLIST MAPS  ({len(playlist)})")
@@ -432,6 +464,11 @@ class HostTab(ttk.Frame):
                               text=f"DEV / UNRELEASED MAPS  ({len(dev)})")
         for n in dev:
             self.map_tree.insert(self.CAT_DEV, "end", iid=n, text=n, tags=("map",))
+
+        self.map_tree.insert("", "end", iid=self.CAT_UNCONFIRMED_MAP, open=True, tags=("category",),
+                              text=f"UNCONFIRMED MAPS (guessed paths)  ({len(unconfirmed)})")
+        for n in unconfirmed:
+            self.map_tree.insert(self.CAT_UNCONFIRMED_MAP, "end", iid=n, text=n, tags=("map_unconfirmed",))
 
     def _on_map_filter_keyrelease(self, _evt=None):
         if self._map_filter_after_id is not None:
@@ -446,10 +483,94 @@ class HostTab(ttk.Frame):
         iid = self.map_tree.focus()
         if not iid:
             return
-        if iid in (self.CAT_PLAYLIST, self.CAT_DEV):
+        if iid in (self.CAT_PLAYLIST, self.CAT_DEV, self.CAT_UNCONFIRMED_MAP):
             self.map_tree.item(iid, open=not self.map_tree.item(iid, "open"))
             return
         self._load_match()
+
+    def _on_map_select(self, _evt=None):
+        name = self._selected_map()
+        info = self.maps.get(name) if name else None
+        note = info.get("note", "") if info else ""
+        if info and info.get("status") == "unconfirmed":
+            self.map_note_var.set("⚠ UNCONFIRMED PATH: " + (note or "never successfully reached live."))
+        else:
+            self.map_note_var.set(note)
+
+    def _populate_gamemode_tree(self):
+        """Groups every gamemode by its 'status' field (working / untested /
+        broken) into three real category rows, same pattern as
+        _populate_map_tree. Every gamemode DT_GamemodeInfo/DT_GameModeData
+        lists is shown regardless of status -- untested/broken ones aren't
+        hidden, they're just visibly flagged (muted text + the note shown
+        under the tree when selected) so nothing is silently presented as
+        equivalent to the confirmed-working modes."""
+        self.gamemode_tree.delete(*self.gamemode_tree.get_children())
+        groups = {"working": [], "untested": [], "broken": []}
+        for name, info in self.gamemodes.items():
+            groups.setdefault(info.get("status", "working"), []).append(name)
+        for names in groups.values():
+            names.sort()
+
+        for status_key, cat_iid, label in (
+            ("working", self.CAT_GM_WORKING, "WORKING"),
+            ("untested", self.CAT_GM_UNTESTED, "UNTESTED"),
+            ("broken", self.CAT_GM_BROKEN, "BROKEN"),
+        ):
+            names = groups.get(status_key, [])
+            if not names:
+                continue
+            self.gamemode_tree.insert("", "end", iid=cat_iid, open=(status_key == "working"),
+                                       tags=("category",), text=f"{label}  ({len(names)})")
+            for name in names:
+                self.gamemode_tree.insert(cat_iid, "end", iid=name, text=name,
+                                           tags=(f"gm_{status_key}",))
+
+    def _selected_gamemode(self):
+        sel = self.gamemode_tree.selection()
+        if not sel or sel[0] in (self.CAT_GM_WORKING, self.CAT_GM_UNTESTED, self.CAT_GM_BROKEN):
+            return None
+        return sel[0]
+
+    def _select_gamemode(self, name):
+        """Selects `name` in the gamemode tree if it exists, expanding its
+        category first (a collapsed category's children aren't selectable)."""
+        if name not in self.gamemodes:
+            return False
+        parent = self.gamemode_tree.parent(name) if self.gamemode_tree.exists(name) else None
+        if parent:
+            self.gamemode_tree.item(parent, open=True)
+        try:
+            self.gamemode_tree.selection_set(name)
+            self.gamemode_tree.see(name)
+            return True
+        except tk.TclError:
+            return False
+
+    def _on_gamemode_double_click(self, _evt=None):
+        iid = self.gamemode_tree.focus()
+        if not iid:
+            return
+        if iid in (self.CAT_GM_WORKING, self.CAT_GM_UNTESTED, self.CAT_GM_BROKEN):
+            self.gamemode_tree.item(iid, open=not self.gamemode_tree.item(iid, "open"))
+
+    def _on_gamemode_select(self, _evt=None):
+        name = self._selected_gamemode()
+        if not name:
+            self.gamemode_note_var.set("")
+            return
+        info = self.gamemodes[name]
+        self.cap_var.set(info["default_cap"])
+        self.team_var.set(info["default_team_size"])
+        self.team_spin.configure(state="normal" if info["team_based"] else "disabled")
+        status = info.get("status", "working")
+        note = info.get("note", "")
+        if status == "broken":
+            self.gamemode_note_var.set("✗ BROKEN: " + (note or "confirmed not to work."))
+        elif status == "untested":
+            self.gamemode_note_var.set("⚠ UNTESTED: " + (note or "class exists but never confirmed live."))
+        else:
+            self.gamemode_note_var.set(note)
 
     def _apply_saved_state(self):
         """Restores the last map/gamemode/cap/team/private/bots this tab was
@@ -458,9 +579,12 @@ class HostTab(ttk.Frame):
         _load_ui_state()/_save_ui_state() near the top of this file."""
         state = _load_ui_state()
         mode = state.get("gamemode")
-        if mode and mode in self.gamemodes:
-            self.mode_var.set(mode)
-        self._on_mode_change()
+        if not (mode and self._select_gamemode(mode)):
+            # nothing saved (or it's gone from gamemodes.json) -- fall back to
+            # the first working mode rather than leaving the tree unselected.
+            working = sorted(n for n, i in self.gamemodes.items() if i.get("status", "working") == "working")
+            if working:
+                self._select_gamemode(working[0])
         if "cap" in state:
             self.cap_var.set(state["cap"])
         if "team" in state:
@@ -487,23 +611,12 @@ class HostTab(ttk.Frame):
         self.gamemodes = api.list_gamemodes()
 
         self._populate_map_tree(self.map_filter_var.get())
-
-        mode_names = list(self.gamemodes.keys())
-        self.mode_cb.configure(values=mode_names)
-        if mode_names:
-            self.mode_var.set(mode_names[0])
-            self._on_mode_change()
+        self._populate_gamemode_tree()
         self.app.status(f"Reloaded config: {len(self.maps)} maps, {len(self.gamemodes)} gamemodes")
-
-    def _on_mode_change(self, _evt=None):
-        info = self.gamemodes[self.mode_var.get()]
-        self.cap_var.set(info["default_cap"])
-        self.team_var.set(info["default_team_size"])
-        self.team_spin.configure(state="normal" if info["team_based"] else "disabled")
 
     def _selected_map(self):
         sel = self.map_tree.selection()
-        if not sel or sel[0] in (self.CAT_PLAYLIST, self.CAT_DEV):
+        if not sel or sel[0] in (self.CAT_PLAYLIST, self.CAT_DEV, self.CAT_UNCONFIRMED_MAP):
             return None
         return sel[0]
 
@@ -512,11 +625,30 @@ class HostTab(ttk.Frame):
         if not name:
             messagebox.showwarning("No map selected", "Pick a map from the list first.")
             return
-        map_path = self.maps[name]["path"]
-        mode_name = self.mode_var.get()
-        gm_class = self.gamemodes[mode_name]["class"]
+        mode_name = self._selected_gamemode()
+        if not mode_name:
+            messagebox.showwarning("No gamemode selected", "Pick a gamemode from the list first.")
+            return
+        mode_info = self.gamemodes[mode_name]
+        status = mode_info.get("status", "working")
+        if status != "working":
+            note = mode_info.get("note", "no details recorded.")
+            kind = "BROKEN" if status == "broken" else "UNTESTED"
+            if not messagebox.askyesno(
+                    f"{kind} gamemode",
+                    f"'{mode_name}' is marked {kind.lower()}:\n\n{note}\n\n"
+                    "Load it anyway?"):
+                return
+        map_info = self.maps[name]
+        if map_info.get("status") == "unconfirmed" and not messagebox.askyesno(
+                "Unconfirmed map",
+                f"'{name}'s path has never been confirmed to actually load:\n\n"
+                f"{map_info.get('note', 'no details recorded.')}\n\nTry anyway?"):
+            return
+        map_path = map_info["path"]
+        gm_class = mode_info["class"]
         cap = self.cap_var.get()
-        team = self.team_var.get() if self.gamemodes[mode_name]["team_based"] else None
+        team = self.team_var.get() if mode_info["team_based"] else None
         private = self.private_var.get()
         bots = self.bots_var.get()
 
@@ -637,14 +769,13 @@ class HostTab(ttk.Frame):
                 if messagebox.askyesno(
                         "Add gamemode?",
                         f"Found a class for '{name}':\n{class_path}\n\n"
-                        "Add it to gamemodes.json with a default cap of 8 (non-team)? "
-                        "You can hand-edit team_based/cap/team_size afterward in "
-                        "%LOCALAPPDATA%\\BodycamOverlay\\gamemodes.json if that's wrong -- "
+                        "Add it to gamemodes.json with a default cap of 8 (non-team), "
+                        "listed under UNTESTED? You can hand-edit team_based/cap/team_size/"
+                        "status afterward in %LOCALAPPDATA%\\BodycamOverlay\\gamemodes.json -- "
                         "this hasn't been tested in an actual match yet."):
                     api.add_gamemode(name, class_path)
             self.gamemodes = api.list_gamemodes()
-            mode_names = list(self.gamemodes.keys())
-            self.mode_cb.configure(values=mode_names)
+            self._populate_gamemode_tree()
 
         self.app.runner.run(work, done, self.app.on_error("gamemode discovery failed"))
 

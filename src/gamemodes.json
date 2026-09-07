@@ -1,11 +1,20 @@
 {
-  "_comment": "Derived from Bodycam/Content/GM/Gamemode/*.uasset (GM_Menu excluded, it's not a playable mode). team_based controls whether the UI shows a Team Cap field. Default caps are the shipped DataAsset defaults, seen in reference.md / confirmed live.",
+  "_comment": "Derived from Bodycam/Content/GM/Gamemode/*.uasset (GM_Menu excluded, it's not a playable mode). team_based controls whether the UI shows a Team Cap field. Default caps for 'working' modes are the shipped DataAsset defaults, seen in reference.md / confirmed live. 'status' is one of working / untested / broken -- see 'note' on any non-working entry for why, and knowledge_base/CAPABILITIES.md for the full live-testing history. Untested/broken modes are still listed (not hidden) so nothing about the game's own content is hidden from the Host tab -- the Gamemode picker groups by this field and shows the note for whichever one is selected.",
 
-  "Deathmatch":       {"class": "/Game/GM/Gamemode/GM_Deathmatch.GM_Deathmatch_C",     "team_based": false, "default_cap": 7,  "default_team_size": 1},
-  "Team Deathmatch":  {"class": "/Game/GM/Gamemode/GM_TeamDeathMatch.GM_TeamDeathMatch_C", "team_based": true,  "default_cap": 10, "default_team_size": 5},
-  "Gun Game":         {"class": "/Game/GM/Gamemode/GM_GunGame.GM_GunGame_C",           "team_based": false, "default_cap": 7,  "default_team_size": 1},
-  "Hardpoint":        {"class": "/Game/GM/Gamemode/GM_Hardpoint.GM_Hardpoint_C",       "team_based": true,  "default_cap": 10, "default_team_size": 5},
-  "Body Bomb":        {"class": "/Game/GM/Gamemode/GM_BodyBomb.GM_BodyBomb_C",         "team_based": true,  "default_cap": 10, "default_team_size": 5},
-  "Versus":           {"class": "/Game/GM/Gamemode/GM_Versus.GM_Versus_C",             "team_based": true,  "default_cap": 10, "default_team_size": 5},
-  "Wingman":          {"class": "/Game/GM/Gamemode/GM_Wingman.GM_Wingman_C",           "team_based": true,  "default_cap": 4,  "default_team_size": 2}
+  "Deathmatch":       {"class": "/Game/GM/Gamemode/GM_Deathmatch.GM_Deathmatch_C",     "team_based": false, "default_cap": 7,  "default_team_size": 1, "status": "working"},
+  "Team Deathmatch":  {"class": "/Game/GM/Gamemode/GM_TeamDeathMatch.GM_TeamDeathMatch_C", "team_based": true,  "default_cap": 10, "default_team_size": 5, "status": "working"},
+  "Gun Game":         {"class": "/Game/GM/Gamemode/GM_GunGame.GM_GunGame_C",           "team_based": false, "default_cap": 7,  "default_team_size": 1, "status": "working"},
+  "Hardpoint":        {"class": "/Game/GM/Gamemode/GM_Hardpoint.GM_Hardpoint_C",       "team_based": true,  "default_cap": 10, "default_team_size": 5, "status": "working"},
+  "Body Bomb":        {"class": "/Game/GM/Gamemode/GM_BodyBomb.GM_BodyBomb_C",         "team_based": true,  "default_cap": 10, "default_team_size": 5, "status": "working"},
+  "Versus":           {"class": "/Game/GM/Gamemode/GM_Versus.GM_Versus_C",             "team_based": true,  "default_cap": 10, "default_team_size": 5, "status": "working"},
+  "Wingman":          {"class": "/Game/GM/Gamemode/GM_Wingman.GM_Wingman_C",           "team_based": true,  "default_cap": 4,  "default_team_size": 2, "status": "working"},
+
+  "Zombie":           {"class": "/Game/GM/Gamemode/GM_Zombie.GM_Zombie_C",             "team_based": false, "default_cap": 8,  "default_team_size": 1, "status": "untested",
+                        "note": "Class confirmed to exist (2026-09-07, via LoadAsset+StaticFindObject). Its real maps are 'Assylum'/'Village' (DT_UI_ZombieMaps) but their live package paths aren't confirmed -- see maps.json's own unconfirmed entries for the guesses tried. Never successfully observed live as the active gamemode; cap/team defaults here are guesses, not measured."},
+  "Pit":              {"class": "/Game/GM/Gamemode/GM_Pit.GM_Pit_C",                  "team_based": true,  "default_cap": 8,  "default_team_size": 4, "status": "untested",
+                        "note": "Class confirmed to exist (2026-09-07). Its real maps are 'Pit'/'Logistics' (DT_UI_PitMaps), paths unconfirmed. Never travel-tested at all yet. cap/team defaults are guesses."},
+  "OnlyPistol":       {"class": "/Game/GM/Gamemode/GM_OnlyPistol.GM_OnlyPistol_C",     "team_based": false, "default_cap": 7,  "default_team_size": 1, "status": "untested",
+                        "note": "Class confirmed to exist (2026-09-07). Travel attempts on the known-good AirSoft map did not engage the class (stayed on GM_Bodycam_C) -- but a same-session sanity check with the already-proven Deathmatch ALSO failed the same way, so this looks like a broader session-state issue from repeated test travels that day, not proof OnlyPistol itself is broken. Needs a clean retest in a fresh game session before trusting either way."},
+  "Training":         {"class": "/Game/GM/Gamemode/GM_Training.GM_Training_C",        "team_based": false, "default_cap": 1,  "default_team_size": 1, "status": "broken",
+                        "note": "Confirmed live 2026-09-07: hosting this on 'Shooting Range' changes the level (get_current_level_name() correctly shows ShootingRange) but the gamemode never actually switches (get_live_state() still reports GM_Bodycam_C) -- the practical result is the player falling endlessly with no way out but quitting. Likely a practice-range backdrop not meant to be entered via servertravel. Do not use from the Host tab."}
 }

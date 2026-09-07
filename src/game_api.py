@@ -533,17 +533,30 @@ return tostring(cls ~= nil)
     return found
 
 
-def add_gamemode(name, class_path, team_based=False, default_cap=8, default_team_size=1):
+def add_gamemode(name, class_path, team_based=False, default_cap=8, default_team_size=1,
+                  status="untested", note=""):
     """Appends a new entry to the persisted gamemodes.json (the copy in
     _CONFIG_DIR seeded on first run, not the bundled default -- see
     reload_configs()/docs/DOCUMENTATION.md §5.3) and reloads GAMEMODES in
     place. Used by the Host tab's 'Discover More Gamemodes...' so a confirmed
-    class path can be added without hand-editing the file first."""
+    class path can be added without hand-editing the file first.
+
+    `status` is one of 'working' / 'untested' / 'broken' -- a freshly
+    discovered class defaults to 'untested' since finding the class path
+    proves nothing about whether it's actually hostable (see
+    knowledge_base/CAPABILITIES.md's Training/GM_Training_C entry for exactly
+    that gap). The Host tab groups its gamemode list by this field and shows
+    `note` for whichever entry is selected, so a mode is never silently
+    presented as equivalent to the confirmed-working ones."""
     path = os.path.join(_CONFIG_DIR, "gamemodes.json")
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    data[name] = {"class": class_path, "team_based": team_based,
-                  "default_cap": default_cap, "default_team_size": default_team_size}
+    entry = {"class": class_path, "team_based": team_based,
+             "default_cap": default_cap, "default_team_size": default_team_size,
+             "status": status}
+    if note:
+        entry["note"] = note
+    data[name] = entry
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
     reload_configs()
