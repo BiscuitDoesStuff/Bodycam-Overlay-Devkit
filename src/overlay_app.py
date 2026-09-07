@@ -299,7 +299,9 @@ class HostTab(ttk.Frame):
     CAT_UNCONFIRMED_MAP = "\x00cat_unconfirmed_map"
     CAT_GM_WORKING = "\x00cat_gm_working"
     CAT_GM_UNTESTED = "\x00cat_gm_untested"
+    CAT_GM_NO_CONTENT = "\x00cat_gm_no_content"
     CAT_GM_BROKEN = "\x00cat_gm_broken"
+    _GM_CATEGORY_IIDS = (CAT_GM_WORKING, CAT_GM_UNTESTED, CAT_GM_NO_CONTENT, CAT_GM_BROKEN)
 
     def __init__(self, parent, app):
         super().__init__(parent)
@@ -354,6 +356,7 @@ class HostTab(ttk.Frame):
         gm_scroll.config(command=self.gamemode_tree.yview)
         self.gamemode_tree.tag_configure("gm_working", foreground=FG)
         self.gamemode_tree.tag_configure("gm_untested", foreground=MUTED)
+        self.gamemode_tree.tag_configure("gm_no_content", foreground=MUTED)
         self.gamemode_tree.tag_configure("gm_broken", foreground=MUTED)
         self.gamemode_tree.bind("<<TreeviewSelect>>", self._on_gamemode_select)
         self.gamemode_tree.bind("<Double-Button-1>", self._on_gamemode_double_click)
@@ -499,14 +502,21 @@ class HostTab(ttk.Frame):
 
     def _populate_gamemode_tree(self):
         """Groups every gamemode by its 'status' field (working / untested /
-        broken) into three real category rows, same pattern as
+        no_content / broken) into real category rows, same pattern as
         _populate_map_tree. Every gamemode DT_GamemodeInfo/DT_GameModeData
-        lists is shown regardless of status -- untested/broken ones aren't
+        lists is shown regardless of status -- non-working ones aren't
         hidden, they're just visibly flagged (muted text + the note shown
         under the tree when selected) so nothing is silently presented as
-        equivalent to the confirmed-working modes."""
+        equivalent to the confirmed-working modes. 'no_content' is distinct
+        from 'broken': it means the class/asset exists (LoadAsset +
+        StaticFindObject resolves it) but hosting into it demonstrably never
+        engages it as the active gamemode -- a leftover reference with no
+        real playable content, not a bug in something that actually runs.
+        'broken' is reserved for a mode that DOES engage but has an actual
+        problem during play -- see gamemodes.json's own comment for the full
+        definitions."""
         self.gamemode_tree.delete(*self.gamemode_tree.get_children())
-        groups = {"working": [], "untested": [], "broken": []}
+        groups = {"working": [], "untested": [], "no_content": [], "broken": []}
         for name, info in self.gamemodes.items():
             groups.setdefault(info.get("status", "working"), []).append(name)
         for names in groups.values():
@@ -515,6 +525,7 @@ class HostTab(ttk.Frame):
         for status_key, cat_iid, label in (
             ("working", self.CAT_GM_WORKING, "WORKING"),
             ("untested", self.CAT_GM_UNTESTED, "UNTESTED"),
+            ("no_content", self.CAT_GM_NO_CONTENT, "NO CONTENT (class exists, not implemented)"),
             ("broken", self.CAT_GM_BROKEN, "BROKEN"),
         ):
             names = groups.get(status_key, [])
@@ -528,7 +539,7 @@ class HostTab(ttk.Frame):
 
     def _selected_gamemode(self):
         sel = self.gamemode_tree.selection()
-        if not sel or sel[0] in (self.CAT_GM_WORKING, self.CAT_GM_UNTESTED, self.CAT_GM_BROKEN):
+        if not sel or sel[0] in self._GM_CATEGORY_IIDS:
             return None
         return sel[0]
 
@@ -551,7 +562,7 @@ class HostTab(ttk.Frame):
         iid = self.gamemode_tree.focus()
         if not iid:
             return
-        if iid in (self.CAT_GM_WORKING, self.CAT_GM_UNTESTED, self.CAT_GM_BROKEN):
+        if iid in self._GM_CATEGORY_IIDS:
             self.gamemode_tree.item(iid, open=not self.gamemode_tree.item(iid, "open"))
 
     def _on_gamemode_select(self, _evt=None):
@@ -567,6 +578,8 @@ class HostTab(ttk.Frame):
         note = info.get("note", "")
         if status == "broken":
             self.gamemode_note_var.set("✗ BROKEN: " + (note or "confirmed not to work."))
+        elif status == "no_content":
+            self.gamemode_note_var.set("⊘ NO CONTENT: " + (note or "class exists but isn't wired up as a real mode."))
         elif status == "untested":
             self.gamemode_note_var.set("⚠ UNTESTED: " + (note or "class exists but never confirmed live."))
         else:
@@ -633,7 +646,7 @@ class HostTab(ttk.Frame):
         status = mode_info.get("status", "working")
         if status != "working":
             note = mode_info.get("note", "no details recorded.")
-            kind = "BROKEN" if status == "broken" else "UNTESTED"
+            kind = {"broken": "BROKEN", "no_content": "NO CONTENT"}.get(status, "UNTESTED")
             if not messagebox.askyesno(
                     f"{kind} gamemode",
                     f"'{mode_name}' is marked {kind.lower()}:\n\n{note}\n\n"
