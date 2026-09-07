@@ -418,7 +418,19 @@ def get_match_info(timeout=15):
     lockstep both directions, so True here really does mean private.
     IsAllRoundFinish was tried both argument-free and with an out-table and
     produced no value either way -- dropped rather than shipped as a
-    permanently-'n/a' field."""
+    permanently-'n/a' field.
+
+    IMPORTANT correction (2026-09-07, later same day): GetLobbyAccessMethod/
+    IsHostMigrating/GetServerSteamID are declared on AGM_Bodycam_C (the Lobby
+    gamemode class specifically, confirmed via the UE4SS-generated C++ SDK --
+    see knowledge_base/sdk_headers/GM_Bodycam.hpp) and do NOT exist on a
+    per-match gamemode instance -- confirmed live: once actually in a
+    Deathmatch match (GM_Deathmatch_C active), all three correctly degrade to
+    'n/a' via this function's own pcall guard rather than erroring, but that
+    means they only ever return real data while sitting in the Lobby. This
+    isn't a bug in this function; it's a fact about the game's own class
+    hierarchy. HasMatchStarted/HasMatchEnded are apparently on a shared base
+    class and keep working in both places."""
     lua = r"""
 local function safe_out(fn, field, needs_tostring)
     local t = {}
