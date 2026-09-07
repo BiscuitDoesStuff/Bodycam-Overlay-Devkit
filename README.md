@@ -103,9 +103,10 @@ set of commands with someone else.
 
 **Plugins tab** — load a shareable JSON "plugin" file (same shape as a Saved
 Command Buttons export, plus a name and optional section labels/dividers)
-as its own sub-tab. See **[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §3 for
-the exact file format, the Run Once vs Toggle mechanism, and how to write
-one from scratch or by exporting from Console.
+as its own sub-tab. "Add Plugin..." shows a preview of every button's code
+before it's installed. See **[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §3
+for the exact file format, the Run Once vs Toggle mechanism, and how to
+write one from scratch or by exporting from Console.
 
 **Shell tab** — runs raw Bash scripts on your own PC via Git Bash, entirely
 separate from the game. Also covered in **[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §2.

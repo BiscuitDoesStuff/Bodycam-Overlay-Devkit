@@ -926,6 +926,58 @@ class SavedButtonsTab(ttk.Frame):
         self.app.status(f"Exported buttons to {path}")
 
 
+class PluginPreviewDialog(tk.Toplevel):
+    """Shows a plugin's name and every button's label/mode/code before it's
+    actually installed. Backs up the safety note in 1-DOCUMENTATION.md §3.7
+    ("read a plugin's code before adding it") with something to actually
+    read right here, instead of just a warning to go find the file yourself
+    first."""
+
+    def __init__(self, parent, plugin_name, widgets, on_confirm):
+        super().__init__(parent)
+        self.title(f"Preview: {plugin_name}")
+        self.configure(bg=BG)
+        self.geometry("560x480")
+        self.attributes("-topmost", True)
+        self.on_confirm = on_confirm
+
+        tk.Label(self, text=f"'{plugin_name}' -- {len(widgets)} widget(s). "
+                             "Review the code below before adding it.",
+                 bg=BG, fg=FG, wraplength=540, justify="left").pack(anchor="w", padx=10, pady=(10, 4))
+
+        inner = _make_scrollable(self)
+        if not widgets:
+            tk.Label(inner, text="(no widgets in this file)", bg=BG, fg="#888").pack(
+                anchor="w", padx=6, pady=10)
+        for spec in widgets:
+            kind = spec.get("widget", "button")
+            if kind == "label":
+                tk.Label(inner, text=spec.get("label", ""), bg=BG, fg=FG,
+                         font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=6, pady=(10, 2))
+                continue
+            if kind == "separator":
+                ttk.Separator(inner, orient="horizontal").pack(fill="x", padx=6, pady=6)
+                continue
+            code = spec.get("code", "")
+            mode = spec.get("mode", "run_once")
+            tk.Label(inner, text=f'{spec.get("label", "?")}  [{mode}]', bg=BG, fg=FG,
+                     font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=6, pady=(8, 0))
+            code_box = tk.Text(inner, height=min(12, code.count("\n") + 2), bg="#141418", fg=FG,
+                                font=("Consolas", 9), wrap="none")
+            code_box.insert("1.0", code)
+            code_box.configure(state="disabled")
+            code_box.pack(fill="x", padx=6, pady=(2, 4))
+
+        btn_row = tk.Frame(self, bg=BG)
+        btn_row.pack(fill="x", padx=10, pady=10)
+        tk.Button(btn_row, text="Add Plugin", bg=GOOD, fg="white", command=self._confirm).pack(side="left")
+        tk.Button(btn_row, text="Cancel", command=self.destroy).pack(side="left", padx=6)
+
+    def _confirm(self):
+        self.destroy()
+        self.on_confirm()
+
+
 class PluginsTab(ttk.Frame):
     """Loads a JSON 'plugin' file -- same widget shape as Saved Command
     Buttons, plus a plugin_name and optional label/separator widgets for
@@ -965,12 +1017,21 @@ class PluginsTab(ttk.Frame):
         if not path:
             return
         try:
-            plugin = api.add_plugin(path)
+            plugin_name, data = api.preview_plugin(path)
         except Exception as e:
             messagebox.showerror("Invalid plugin", str(e))
             return
-        self._add_tab(plugin)
-        self.app.status(f"Loaded plugin '{plugin['plugin_name']}'")
+
+        def confirm():
+            try:
+                plugin = api.add_plugin(path)
+            except Exception as e:
+                messagebox.showerror("Invalid plugin", str(e))
+                return
+            self._add_tab(plugin)
+            self.app.status(f"Loaded plugin '{plugin['plugin_name']}'")
+
+        PluginPreviewDialog(self.app.root, plugin_name, data.get("widgets", []), confirm)
 
     def _remove_selected(self):
         sel = self.inner_nb.select()

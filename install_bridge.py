@@ -9,9 +9,15 @@ Callable standalone (`python install_bridge.py`) or imported by overlay_app.py
 to run automatically on startup.
 """
 import os
+import re
 import shutil
 import sys
 import webbrowser
+
+try:
+    import winreg
+except ImportError:  # not running on Windows (e.g. this file imported for a syntax check)
+    winreg = None
 
 # PyInstaller onefile builds extract bundled data (see build.bat's --add-data)
 # to a temp dir exposed as sys._MEIPASS; plain `python install_bridge.py` runs
@@ -21,6 +27,9 @@ BUNDLED_MOD = os.path.join(HERE, "mod", "ClaudeBridge")
 UE4SS_BUNDLE = os.path.join(HERE, "ue4ss_bundle")
 UE4SS_RELEASES_URL = "https://github.com/UE4SS-RE/RE-UE4SS/releases"
 
+# Fallback only -- find_game_root() checks every registered Steam library
+# first (see _steam_library_paths), so this short guess-list is just a safety
+# net for a non-Steam copy or if that lookup fails for some reason.
 CANDIDATE_ROOTS = [
     r"C:\Program Files (x86)\Steam\steamapps\common\Bodycam\Bodycam",
     r"C:\Program Files\Steam\steamapps\common\Bodycam\Bodycam",
@@ -29,7 +38,54 @@ CANDIDATE_ROOTS = [
 ]
 
 
+def _steam_install_path():
+    """Finds the Steam client's own install directory (registry first, since
+    Steam itself can be installed anywhere -- falling back to the common
+    default) so its library folders can be read from libraryfolders.vdf."""
+    if winreg is not None:
+        for hive, subkey, value_name in (
+                (winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam", "SteamPath"),
+                (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
+                (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Valve\Steam", "InstallPath")):
+            try:
+                with winreg.OpenKey(hive, subkey) as key:
+                    path, _ = winreg.QueryValueEx(key, value_name)
+                    path = os.path.normpath(path)
+                    if os.path.isdir(path):
+                        return path
+            except OSError:
+                continue
+    for guess in (r"C:\Program Files (x86)\Steam", r"C:\Program Files\Steam"):
+        if os.path.isdir(guess):
+            return guess
+    return None
+
+
+def _steam_library_paths():
+    """Every Steam library folder (the base install plus any added under
+    Steam's own Storage settings -- these can be on any drive/path), parsed
+    from libraryfolders.vdf. This is what lets find_game_root() locate
+    Bodycam wherever the user actually put it instead of only the handful of
+    default paths in CANDIDATE_ROOTS."""
+    steam = _steam_install_path()
+    if steam is None:
+        return []
+    vdf_path = os.path.join(steam, "steamapps", "libraryfolders.vdf")
+    try:
+        text = open(vdf_path, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return [steam]
+    # Only the "path" value of each library entry is needed here, so a regex
+    # over quoted "path" lines is enough -- no need for a full VDF parser.
+    paths = [p.replace("\\\\", "\\") for p in re.findall(r'"path"\s*"([^"]+)"', text)]
+    return list(dict.fromkeys(paths + [steam]))  # de-dup, keep order, base install always included
+
+
 def find_game_root():
+    for library in _steam_library_paths():
+        win64 = os.path.join(library, "steamapps", "common", "Bodycam", "Bodycam", "Binaries", "Win64")
+        if os.path.isdir(win64):
+            return win64
     for root in CANDIDATE_ROOTS:
         win64 = os.path.join(root, "Binaries", "Win64")
         if os.path.isdir(win64):
@@ -133,7 +189,8 @@ def ensure_setup(prompt_for_path=None, on_status=None):
 
 
 def _prompt_for_path():
-    print("Couldn't auto-find your Bodycam install. Common locations checked:")
+    print("Couldn't auto-find your Bodycam install. Checked every registered "
+          "Steam library plus these common locations:")
     for r in CANDIDATE_ROOTS:
         print("  ", r)
     path = input("Paste the full path to Bodycam's Binaries\\Win64 folder: ").strip('"')

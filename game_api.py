@@ -163,12 +163,21 @@ def list_plugins():
     return out
 
 
-def add_plugin(source_path):
+def preview_plugin(source_path):
+    """Reads and validates a plugin file WITHOUT installing it (no copy into
+    _PLUGINS_DIR) -- lets the UI show what a plugin's buttons will actually
+    run before the user commits to adding it (1-DOCUMENTATION.md §3.7).
+    Returns (plugin_name, raw_data)."""
     with open(source_path, encoding="utf-8") as f:
         data = json.load(f)
     if "widgets" not in data:
         raise ValueError("Not a valid plugin file: missing 'widgets'.")
     plugin_name = data.get("plugin_name") or os.path.splitext(os.path.basename(source_path))[0]
+    return plugin_name, data
+
+
+def add_plugin(source_path):
+    plugin_name, data = preview_plugin(source_path)
     safe = "".join(c for c in plugin_name if c.isalnum() or c in " _-").strip() or "plugin"
     dest_name, counter = safe + ".json", 2
     while os.path.exists(os.path.join(_PLUGINS_DIR, dest_name)):
