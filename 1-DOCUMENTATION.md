@@ -245,9 +245,10 @@ Easiest path — build it through the UI, then export it:
    top level (see §3.2), and optionally insert `"label"`/`"separator"`
    widgets to organize it into sections.
 6. That file is now a valid plugin. Plugins tab → "Add Plugin..." → pick
-   it. It's copied into `%LOCALAPPDATA%\BodycamOverlay\plugins\` and shows
-   up as its own sub-tab immediately, and every time the app starts from
-   then on.
+   it. A preview window shows every button's label, mode, and code first --
+   click "Add Plugin" there to actually install it. Once added, it's copied
+   into `%LOCALAPPDATA%\BodycamOverlay\plugins\` and shows up as its own
+   sub-tab immediately, and every time the app starts from then on.
 
 Or write the JSON by hand from scratch using the format in §3.2 — there's
 nothing the UI does that the file format doesn't support directly.
@@ -298,7 +299,9 @@ into the Console tab yourself — full Lua reflection into the live game
 process, no sandbox. Adding someone else's plugin means running their Lua
 code, unreviewed, inside your game. Read a plugin's `code` fields before
 adding it, the same way you'd read a script before running it in a real
-shell.
+shell — "Add Plugin..." shows every button's code in a preview window
+before it's installed for exactly this reason, but skimming past it is
+still on you.
 
 ---
 
@@ -462,6 +465,18 @@ Without it, every such mod crashes on its first line with `module UEHelpers
 not found` — a silent, total failure that looks like a connectivity problem
 from the overlay's side rather than a missing-file one, so the check has to
 catch that specifically.
+
+`find_game_root()` doesn't just guess a handful of default paths — it first
+reads the Steam client's own install location from the registry
+(`HKCU\Software\Valve\Steam`'s `SteamPath`, falling back to the 32-bit and
+64-bit `HKLM\...\Valve\Steam` keys' `InstallPath`, then a couple of hardcoded
+default folders as a last resort) and parses that install's
+`steamapps/libraryfolders.vdf` for every library folder the user has added,
+on any drive. Each library is checked for `steamapps/common/Bodycam/...`
+before falling back to `CANDIDATE_ROOTS`'s short guess list. The VDF parsing
+is a plain regex over `"path" "..."` lines rather than a real VDF parser --
+that's the only key this needs, and libraryfolders.vdf's structure has been
+stable for years.
 
 ### 5.5 `game_api.py` — live-game hacks and why they're shaped this way
 
