@@ -430,7 +430,18 @@ def get_match_info(timeout=15):
     means they only ever return real data while sitting in the Lobby. This
     isn't a bug in this function; it's a fact about the game's own class
     hierarchy. HasMatchStarted/HasMatchEnded are apparently on a shared base
-    class and keep working in both places."""
+    class and keep working in both places.
+
+    Also added (2026-09-07): my_team/my_kills/my_deaths/my_score/my_rank via
+    GetPcInfo, also Lobby-only for the same reason. Confirmed live: the
+    struct's mangled field names match knowledge_base/sdk_headers/
+    STR_PCInfo.hpp exactly, and reading a nested struct (Stats) this way
+    works fine -- the "structs aren't readable" reflection ceiling
+    documented elsewhere applies to props()-style property reads, not to an
+    explicit out-param call like this one. Deliberately does NOT read the
+    PC/Character/SteamID/SkinInfo/BadgeInfo fields from this struct -- see
+    the Lua comment inline for why (a real crash, not caution for its own
+    sake)."""
     lua = r"""
 local function safe_out(fn, field, needs_tostring)
     local t = {}
@@ -455,6 +466,39 @@ out[#out+1] = 'ended=' .. safe_plain(function() return gm:HasMatchEnded() end)
 out[#out+1] = 'lobby_private=' .. safe_out(function(t) gm:GetLobbyAccessMethod(t) end, 'LobbyAccessMethod')
 out[#out+1] = 'host_migrating=' .. safe_out(function(t) gm:IsHostMigrating(t) end, 'Yes')
 out[#out+1] = 'server_steam_id=' .. safe_out(function(t) gm:GetServerSteamID(t) end, 'SteamID', true)
+
+-- GetPcInfo (Lobby-only, like the three above) hands back the local player's
+-- own FSTR_PCInfo -- a Blueprint struct with GUID-mangled field names (see
+-- knowledge_base/sdk_headers/STR_PCInfo.hpp). Matched by name PREFIX, not
+-- the full mangled name, since only the prefix is stable across a Blueprint
+-- recompile. Deliberately only reads plain ints/strings -- the PC/Character/
+-- SkinInfo/BadgeInfo fields are UObject pointers or DataTableRowHandles that
+-- are NEVER touched beyond this, because calling further reflection methods
+-- (GetFName, equality, etc.) on a UObject pulled out of a struct this way
+-- crashed the game during this feature's own development -- see
+-- knowledge_base/CAPABILITIES.md's crash list. KillInfo (a nested array
+-- inside Stats) is skipped for the same reason plus its numeric keys.
+local pcOk, pcErr = pcall(function()
+    local t = {}
+    gm:GetPcInfo(t)
+    for k, v in pairs(t) do
+        if k:find('^Team_') then
+            out[#out+1] = 'my_team=' .. tostring(v)
+        elseif k:find('^Stats_') and type(v) == 'table' then
+            for sk, sv in pairs(v) do
+                if sk:find('^Kill_') then out[#out+1] = 'my_kills=' .. tostring(sv)
+                elseif sk:find('^Death_') then out[#out+1] = 'my_deaths=' .. tostring(sv)
+                elseif sk:find('^Score_') then out[#out+1] = 'my_score=' .. tostring(sv)
+                elseif sk:find('^RankName_') then
+                    local ok3, rn = pcall(function() return sv:ToString() end)
+                    out[#out+1] = 'my_rank=' .. (ok3 and rn or 'n/a')
+                end
+            end
+        end
+    end
+end)
+if not pcOk then out[#out+1] = 'my_team=n/a' end
+
 return table.concat(out, '\n')
 """
     body = bc.run_lua(lua, timeout=timeout).strip()
