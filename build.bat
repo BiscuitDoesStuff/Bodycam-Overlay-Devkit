@@ -5,8 +5,15 @@ REM Run this again any time you (or Claude) edit the src\*.py/.json files, to
 REM regenerate dist\BodycamOverlay.exe. Run from the repo root -- paths below
 REM are relative to it.
 REM
-REM This window stays open and reports what happened either way (success or
-REM failure) -- if you're double-clicking this file rather than running it
+REM Everything below runs as `python -m ...` rather than bare `pip`/
+REM `pyinstaller` commands -- on some Python installs (notably the Microsoft
+REM Store build) pip installs a package's console-script .exe (pyinstaller.exe
+REM included) into a user Scripts folder that isn't on PATH, even though the
+REM package itself installed fine. Going through `python -m` sidesteps that
+REM entirely, since it only ever needs `python` itself on PATH.
+REM
+REM This window also stays open and reports what happened either way (success
+REM or failure) -- if you're double-clicking this file rather than running it
 REM from an already-open terminal, a script with no pause at the end closes
 REM the instant it's done, success or failure, so there'd be nothing to read.
 
@@ -17,17 +24,10 @@ if errorlevel 1 (
     goto :fail
 )
 
-where pip >nul 2>&1
-if errorlevel 1 (
-    echo pip isn't on PATH -- reinstall Python with pip included, or run
-    echo "python -m ensurepip", then try again.
-    goto :fail
-)
-
-pip show pyinstaller >nul 2>&1
+python -m pip show pyinstaller >nul 2>&1
 if errorlevel 1 (
     echo Installing PyInstaller...
-    pip install pyinstaller
+    python -m pip install pyinstaller
     if errorlevel 1 (
         echo Failed to install PyInstaller -- see the error above.
         goto :fail
@@ -35,7 +35,7 @@ if errorlevel 1 (
 )
 
 echo Installing/updating app dependencies from requirements.txt...
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 if errorlevel 1 (
     echo pip install failed -- see the error above.
     goto :fail
@@ -43,7 +43,7 @@ if errorlevel 1 (
 
 echo.
 echo Running PyInstaller...
-pyinstaller --noconfirm --onefile --windowed --name BodycamOverlay ^
+python -m PyInstaller --noconfirm --onefile --windowed --name BodycamOverlay ^
     --add-data "src/families.json;." ^
     --add-data "src/maps.json;." ^
     --add-data "src/gamemodes.json;." ^
