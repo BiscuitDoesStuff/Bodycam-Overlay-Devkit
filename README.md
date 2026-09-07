@@ -84,6 +84,9 @@ after installing the mod.
 - Slot changes let you pick *any* category (Primary/Secondary/Melee/Lethal/
   Perk/Other), not just the slot's usual one.
 - **Set as Active Loadout** calls the game's own `SelectNewCurrentLoadout`.
+- **Restore Backup...** picks from the automatic timestamped backups every
+  edit makes and restores one (itself backing up whatever it's about to
+  overwrite first).
 
 **Game Speed tab** — Slomo control plus quick 3x speed / reset buttons.
 

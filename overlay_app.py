@@ -5,6 +5,8 @@ windowed or borderless mode so this window can sit visually on top of it.
 Run with:  python overlay_app.py
 Requires the game to be running with the ClaudeBridge UE4SS mod loaded.
 """
+import logging
+import logging.handlers
 import os
 import queue
 import socket
@@ -21,6 +23,15 @@ from PIL import Image, ImageDraw
 import game_api as api
 import shell_client
 import install_bridge
+
+# A --windowed PyInstaller build has no console: print() output (and, in some
+# builds, an unhandled exception's default stderr traceback) goes nowhere.
+# Log to a capped file instead so a crash/error is diagnosable after the fact.
+_log_handler = logging.handlers.RotatingFileHandler(
+    os.path.join(api._CONFIG_DIR, "overlay.log"), maxBytes=1_000_000, backupCount=2, encoding="utf-8")
+_log_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+logging.getLogger().addHandler(_log_handler)
+logging.getLogger().setLevel(logging.INFO)
 
 BG = "#1e1e24"
 FG = "#e8e8ec"
@@ -56,7 +67,7 @@ class AsyncRunner:
                 elif kind == "err" and on_error:
                     on_error(payload)
                 elif kind == "err":
-                    print("async error:", payload)
+                    logging.error("Unhandled async error", exc_info=payload)
         except queue.Empty:
             pass
         self.root.after(80, self._poll)
@@ -414,6 +425,7 @@ class LoadoutTab(ttk.Frame):
         tk.Button(top, text="Refresh", command=self._refresh).pack(side="left", padx=6)
         tk.Button(top, text="Set as Active Loadout", bg=ACCENT, fg="white",
                   command=self._set_active).pack(side="left", padx=6)
+        tk.Button(top, text="Restore Backup...", command=self._restore_backup).pack(side="left", padx=6)
 
         self.body = tk.Frame(self, bg=BG)
         self.body.pack(fill="both", expand=True, padx=8, pady=8)
@@ -475,6 +487,39 @@ class LoadoutTab(ttk.Frame):
             self.app.status(f"Loadout {idx+1} active: {result}")
 
         self.app.runner.run(work, done, self.app.on_error())
+
+    def _restore_backup(self):
+        self.app.status("Loading backups...")
+
+        def work():
+            return api.list_backups()
+
+        def done(backups):
+            if not backups:
+                messagebox.showinfo("No backups found", "No Loadout.sav backups exist yet.")
+                return
+            by_label = dict(backups)
+            PickerDialog(self.app.root, "Choose backup to restore", list(by_label.keys()),
+                         lambda label: self._confirm_restore(by_label[label]))
+
+        self.app.runner.run(work, done, self.app.on_error("loading backups failed"))
+
+    def _confirm_restore(self, path):
+        if not messagebox.askyesno(
+                "Restore backup",
+                f"Restore Loadout.sav from this backup?\n\n{os.path.basename(path)}\n\n"
+                "Your current save will itself be backed up first, so this is reversible."):
+            return
+        self.app.status("Restoring backup...")
+
+        def work():
+            return api.restore_backup(path)
+
+        def done(_result):
+            self.app.status("Backup restored -- reselect/cycle your loadout in-game to make it stick.")
+            self._refresh()
+
+        self.app.runner.run(work, done, self.app.on_error("restore failed"))
 
     def _change(self, key):
         if key == "operator":
@@ -1048,6 +1093,7 @@ class App:
         self.root.configure(bg=BG)
         self.root.attributes("-topmost", True)
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
+        self.root.report_callback_exception = self._log_tk_exception
 
         self.runner = AsyncRunner(self.root)
 
@@ -1172,6 +1218,12 @@ class App:
         exception in the status bar with a prefix, e.g. as the third argument
         to self.runner.run(work, done, ...)."""
         return lambda e: self.status(f"{prefix}: {e}", bad=True)
+
+    def _log_tk_exception(self, exc_type, exc_value, tb):
+        """Replaces Tkinter's default callback-exception handler (which prints
+        to stderr -- invisible in a --windowed build) so an exception raised
+        directly in a widget command/binding still ends up in overlay.log."""
+        logging.error("Unhandled Tk callback exception", exc_info=(exc_type, exc_value, tb))
 
     def _poll_connection(self):
         def work():

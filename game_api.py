@@ -666,12 +666,53 @@ def dump_all_loadouts():
     return [dump_loadout(i) for i in range(loadout_count())]
 
 
-def backup_save():
+_BACKUP_PREFIX = os.path.basename(SAVE_PATH) + ".backup-"
+
+
+def _list_backup_filenames():
+    d = os.path.dirname(SAVE_PATH)
+    if not os.path.isdir(d):
+        return []
+    return sorted(f for f in os.listdir(d) if f.startswith(_BACKUP_PREFIX))
+
+
+def backup_save(keep=20):
+    """Copies Loadout.sav to a timestamped .backup-<ts> file alongside it, then
+    prunes down to the `keep` most recent backups so these don't accumulate
+    forever (see 1-DOCUMENTATION.md §5.2)."""
     import shutil, time
     ts = time.strftime("%Y%m%d-%H%M%S")
     dst = SAVE_PATH + f".backup-{ts}"
     shutil.copy2(SAVE_PATH, dst)
+    names = _list_backup_filenames()
+    for old in names[:-keep] if keep > 0 else names:
+        try:
+            os.remove(os.path.join(os.path.dirname(SAVE_PATH), old))
+        except OSError:
+            pass
     return dst
+
+
+def list_backups():
+    """Available Loadout.sav backups, newest first, as (display_label, full_path)."""
+    import time
+    d = os.path.dirname(SAVE_PATH)
+    out = []
+    for fname in reversed(_list_backup_filenames()):
+        ts = fname[len(_BACKUP_PREFIX):]
+        try:
+            label = time.strftime("%Y-%m-%d %H:%M:%S", time.strptime(ts, "%Y%m%d-%H%M%S"))
+        except ValueError:
+            label = ts
+        out.append((label, os.path.join(d, fname)))
+    return out
+
+
+def restore_backup(backup_path):
+    """Restores Loadout.sav from a backup made by backup_save(), after first
+    backing up the current (about-to-be-overwritten) file the same way."""
+    backup_save()
+    shutil.copy2(backup_path, SAVE_PATH)
 
 
 def set_operator(loadout_idx, operator_name):
