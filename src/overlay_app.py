@@ -406,13 +406,17 @@ class HostTab(ttk.Frame):
         ttk.Separator(right, orient="horizontal").pack(fill="x", padx=PAD, pady=(0, PAD))
 
         # Match Info -- read-only extras beyond Live State (match-started/ended,
-        # lobby privacy, host-migration, server SteamID). Confirmed live
-        # 2026-09-07 -- see get_match_info()'s docstring in game_api.py for
-        # exactly what was tested. server_steam_id reads empty until you're
-        # actually hosting/in a session -- that's expected, not broken.
+        # lobby privacy, host-migration, server SteamID, your own team/K/D/
+        # score/rank via GetPcInfo). Confirmed live 2026-09-07 -- see
+        # get_match_info()'s docstring in game_api.py for exactly what was
+        # tested. Most of these fields (everything except started/ended) only
+        # return real data from the Lobby -- they're declared on the Lobby's
+        # own gamemode class and don't exist on a per-match one, so seeing
+        # them go blank/n/a once you're actually in a match is expected, not
+        # broken.
         ui.label(right, text="Match Info", bg=PANEL, bold=True).pack(
             anchor="w", padx=PAD, pady=(0, 0))
-        self.match_info_box = ui.text(right, width=28, height=7, state="disabled")
+        self.match_info_box = ui.text(right, width=28, height=10, state="disabled")
         self.match_info_box.pack(padx=PAD, pady=(PAD_SM, PAD_SM))
         ui.button(right, "Refresh Match Info", command=self._refresh_match_info).pack(fill="x", padx=PAD)
 
