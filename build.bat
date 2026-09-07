@@ -10,6 +10,13 @@ if errorlevel 1 (
     pip install pyinstaller
 )
 
+echo Installing/updating app dependencies from requirements.txt...
+pip install -r requirements.txt
+if errorlevel 1 (
+    echo pip install failed -- see the error above. Aborting.
+    exit /b 1
+)
+
 pyinstaller --noconfirm --onefile --windowed --name BodycamOverlay ^
     --add-data "src/families.json;." ^
     --add-data "src/maps.json;." ^
