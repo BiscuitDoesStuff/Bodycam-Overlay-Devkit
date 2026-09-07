@@ -81,10 +81,19 @@ after installing the mod.
 ## What it does
 
 **Host / Create Match tab**
-- Pick any map — playlist maps and dev/unreleased maps (dev inventory room,
-  empty loadout map, MoonTown, drone racetracks, etc.) are both listed the
-  same way.
-- Pick a gamemode, player cap, and (for team modes) team cap.
+- Pick any map from a filterable, categorized tree — Playlist Maps,
+  Dev/Unreleased (dev inventory room, empty loadout map, MoonTown, drone
+  racetracks, etc.), and Unconfirmed (a map whose live package path is a
+  best-guess, not yet confirmed to actually load — see
+  `knowledge_base/CAPABILITIES.md`).
+- Pick a gamemode from a similarly categorized tree: Working, Untested,
+  No Content (a real class/asset reference exists but there's no actual
+  playable content behind it — e.g. Zombie/Pit/OnlyPistol/Training), and
+  Broken (engages as the active gamemode but has an actual problem). Every
+  gamemode the game's own data references is listed, not just the 7 that
+  work — selecting a non-working one shows why underneath the tree, and
+  loading one prompts for confirmation first.
+- Player cap and (for team modes) team cap.
 - Toggle Private (sets a session password) and Bots.
 - **Load Custom Match** hosts and travels there directly.
 - **↻ Cycle Current Match** reads your *actual current* map/mode/cap/team
@@ -92,7 +101,16 @@ after installing the mod.
   configuration.
 - **Force Round End** forces a safe window for cap writes via the score-limit
   trick.
-- Live State panel shows phase/population/cap live from the game.
+- Load Custom Match / Cycle / Force Round End all check the live player
+  roster first and ask for confirmation if anyone besides you is currently
+  connected, since any of the three will disrupt a real match in progress.
+- Live State panel shows phase/population/cap live from the game. Match Info
+  shows match-started/ended, lobby privacy, host-migration status, and
+  server SteamID. Roster lists connected players' names (and flags in its
+  own header when more than just you are present).
+- **Discover More Gamemodes...** probes for gamemode classes the game's data
+  references but that aren't in `gamemodes.json` yet, and offers to add any
+  it finds (listed as Untested until confirmed).
 
 **Loadout Editor tab**
 - Pick any of your loadouts (count is read from the save file, not
