@@ -8,6 +8,13 @@ the old separate `CONSOLE_AND_SHELL.txt`, `PLUGINS.txt`, and
 `TROUBLESHOOTING.md` — everything they covered is here, under one table of
 contents, so there's one place to search instead of three.
 
+For what's actually *in* the game itself (every DataTable and its rows, the
+pawn/GameMode reflection surface, and a running list of what's confirmed
+safe vs. confirmed to crash) see
+**[knowledge_base/CAPABILITIES.md](../knowledge_base/CAPABILITIES.md)**
+instead — this file is about how the overlay app works, that one is about
+what the game will and won't let you do to it.
+
 ## Contents
 
 1. [Console tab — Lua inside the game](#1-console-tab--lua-inside-the-game)
@@ -362,6 +369,23 @@ instead of fully restarted after the mod was installed — a brand new mod
 folder needs a real restart. See §1's "How it works" for the full round
 trip this message covers.
 
+### Load Custom Match / Cycle Current Match seems to do nothing
+
+If the status bar reports success but the map/gamemode on screen never
+actually changes, this has been observed to happen after several travel
+attempts are fired in a short window (a handful within a few minutes) — the
+game's own travel system can end up in a state where it stops honoring new
+`servertravel` calls at all, even for a map/mode combination that worked
+moments earlier. There's no in-app fix for this yet; **fully restart
+Bodycam** and space out subsequent attempts rather than repeating them
+quickly. See `knowledge_base/CAPABILITIES.md` for the live incident this
+was found from.
+
+If instead nothing happens because a confirmation dialog appeared and was
+missed — Load Custom Match / Cycle / Force Round End all ask first when the
+live roster shows anyone besides you connected (§5.6's
+`_guard_other_players`) — check for a dialog behind the main window.
+
 ---
 
 ## 5. Internals & design notes
@@ -453,10 +477,17 @@ items are named "AR15 Base ...", Remington700 sometimes shows up as
 string.
 
 `maps.json` and `gamemodes.json` are similarly small and hand-curated —
-edit them the same way if the game adds a new map or mode. All three files
-live in `%LOCALAPPDATA%\BodycamOverlay\` once the app has run once (seeded
-from the copies in this folder on first launch) — edit the copy there to
-change behavior without rebuilding the exe.
+edit them the same way if the game adds a new map or mode. Both also carry
+a `status` field (`maps.json`: `confirmed`/`unconfirmed`; `gamemodes.json`:
+`working`/`untested`/`no_content`/`broken` — see each file's own top-level
+`_comment` for the exact definitions) plus an optional `note` explaining
+why, whenever it isn't the plain working/confirmed case. The Host tab's
+map/gamemode pickers group by this field and show the note for whichever
+entry is selected — a map or mode is never hidden for being unconfirmed or
+non-working, only visibly flagged. All three files live in
+`%LOCALAPPDATA%\BodycamOverlay\` once the app has run once (seeded from the
+copies in this folder on first launch) — edit the copy there to change
+behavior without rebuilding the exe.
 
 ### 5.4 `install_bridge.py` — why bundling UE4SS is on the right side of the line
 
@@ -524,6 +555,38 @@ stable for years.
   `SpawnActor`, most likely GAS-related initialization the game's own item
   spawn path does that a raw `SpawnActor` skips). There is no Spawn tab for
   this reason; don't reintroduce raw actor spawning without solving that.
+- **`get_match_info`**: three of its five fields (`GetLobbyAccessMethod`,
+  `IsHostMigrating`, `GetServerSteamID`) aren't plain getters — each is a
+  BlueprintNativeEvent-style function taking one **out** parameter, called
+  as `fn(t)` with an empty Lua table that UE4SS fills in afterward
+  (confirmed live field names: `t.LobbyAccessMethod`, `t.Yes`, `t.SteamID`).
+  `SteamID`'s value is an FString wrapper needing `:ToString()`, same gotcha
+  as `get_current_level_name()`. `lobby_private`'s polarity was
+  cross-checked live against `GameInstance:UpdateLobbyAccessMethod(True/False)`
+  and matches `host_and_travel`'s own `private` argument exactly.
+  `IsAllRoundFinish` was tried both argument-free and with an out-table and
+  produced no value either way — dropped rather than shipped as a
+  permanently-`'n/a'` field.
+- **`get_player_roster`**: `APlayerState:GetPlayerName()` also returns an
+  FString wrapper, not a plain string — same `:ToString()` fix. Doesn't
+  attempt to separate real players from bots you spawned yourself (no
+  confirmed PlayerState property for that yet), so a roster count includes
+  both — see `HostTab._guard_other_players` in §5.6 for why that's still
+  the right conservative default for a safety check.
+- **`discover_extra_gamemodes` / `add_gamemode`**: probes candidate class
+  paths via `LoadAsset` (loads the package into memory) then
+  `StaticFindObject(...) ~= nil` — deliberately does **not** call
+  `IsChildOf`/`GetSuperClass` on the resulting class object to verify it's
+  really a `GameModeBase` subclass, because calling either of those on a
+  `StaticFindObject`-obtained class reference hung the bridge and crashed
+  the game during this feature's own development (see
+  `knowledge_base/CAPABILITIES.md`'s crash list). A plain non-nil check is
+  as far as this is pushed. `add_gamemode` defaults new finds to
+  `status: "untested"` — see `gamemodes.json`'s own comment for the full
+  `working` / `untested` / `no_content` / `broken` taxonomy, and why
+  `no_content` (a class/asset reference with nothing actually implemented
+  behind it, confirmed for Training/Zombie/Pit/OnlyPistol) is kept distinct
+  from `broken` (engages as the active gamemode but has a real problem).
 
 ### 5.6 `overlay_app.py` — a few non-obvious mechanisms
 
@@ -551,3 +614,45 @@ stable for years.
   copyright notice to be kept in any redistributed copy, source or binary.
   The tab exists to make that credit visible, not to prevent someone from
   deleting it.
+- **`ui_theme.py`**: every widget's colors/fonts/spacing used to be
+  scattered across ~35 inline `bg=/fg=/font=` call sites in `overlay_app.py`,
+  and the ttk widgets (Notebook, Combobox, Separator, Treeview) had no style
+  configuration at all beyond `theme_use("clam")` — they rendered in clam's
+  default light-grey palette next to hand-colored dark tk widgets. This
+  module centralizes the palette (currently strict red/black/white) and
+  ttk style setup behind one `apply()` call, plus small widget factories
+  (`ui.button`, `ui.label`, `ui.treeview`, etc.) that call sites use instead
+  of raw `tk.Widget(...)`. Buttons deliberately don't hover-animate — the
+  only feedback is Tk's native press state (`activebackground`, which only
+  shows while physically held down) plus a hand cursor, not a custom
+  animated effect.
+- **Host tab's map/gamemode pickers are `ttk.Treeview`, not `Combobox`/
+  `Listbox`**: both group their real entries under category header rows
+  (`HostTab.CAT_*` constants — a `\x00`-prefixed sentinel iid, since that
+  can't appear in a real map/mode name, is how a selection is recognized as
+  a category rather than a pickable item). This replaced an earlier design
+  where the map list was one flat `Listbox` with a literal
+  `"--- non-playlist / dev maps ---"` text row acting as a fake divider,
+  which was itself a selectable entry `_selected_map()` had to
+  special-case by string prefix. Every map/gamemode `maps.json`/
+  `gamemodes.json` lists is shown regardless of its `status` field —
+  nothing about the game's own content is hidden, non-working entries are
+  just visibly grouped and show their `note` when selected.
+- **`HostTab._guard_other_players`**: `Load Custom Match` / `Cycle Current
+  Match` / `Force Round End` all route through this before doing anything —
+  it does a fresh `get_player_roster()` read (not a cached one) and asks
+  for confirmation if more than the local player is connected, since any of
+  the three forcibly disrupts a real match in progress. Added after a real
+  near-miss during this project's own testing: repeated live gamemode
+  experiments almost ran against a match that turned out to have 5 real
+  strangers in it. Deliberately does not try to distinguish bots from real
+  players (see §5.5's note on `get_player_roster`) — an extra confirm click
+  when it's actually your own bots is the acceptable cost of the safer
+  default. A roster read that itself fails also asks rather than silently
+  proceeding.
+- **`_load_ui_state` / `_save_ui_state`**: the Host tab's last-used map,
+  gamemode, cap, team size, private, and bots settings persist to
+  `ui_state.json` in the same `_CONFIG_DIR` as `families.json`/
+  `snippets.json`, written on every successful `Load Custom Match`. Restored
+  on the next launch so the tab doesn't reset to defaults every time the
+  overlay restarts.
