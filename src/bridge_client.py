@@ -2,7 +2,7 @@
 
 Talks to the ClaudeBridge UE4SS mod (mod/ClaudeBridge/Scripts/main.lua) over
 two files under %LOCALAPPDATA%\\Temp\\<name>_bridge. Protocol shape and
-design rationale: see 1-DOCUMENTATION.md section 5.1.
+design rationale: see docs/DOCUMENTATION.md section 5.1.
 """
 import os
 import time

@@ -3,9 +3,9 @@
 Deploys the bundled ue4ss_bundle/ (if UE4SS isn't already installed) and
 mod/ClaudeBridge/ into the game's Binaries/Win64, registering the mod in
 mods.txt. Design rationale for what gets bundled/deployed and why: see
-1-DOCUMENTATION.md section 5.4.
+docs/DOCUMENTATION.md section 5.4.
 
-Callable standalone (`python install_bridge.py`) or imported by overlay_app.py
+Callable standalone (`python src/install_bridge.py`) or imported by overlay_app.py
 to run automatically on startup.
 """
 import os
@@ -20,7 +20,7 @@ except ImportError:  # not running on Windows (e.g. this file imported for a syn
     winreg = None
 
 # PyInstaller onefile builds extract bundled data (see build.bat's --add-data)
-# to a temp dir exposed as sys._MEIPASS; plain `python install_bridge.py` runs
+# to a temp dir exposed as sys._MEIPASS; plain `python src/install_bridge.py` runs
 # use this file's own directory instead. Same pattern as game_api.py's _HERE.
 HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 BUNDLED_MOD = os.path.join(HERE, "mod", "ClaudeBridge")
@@ -96,7 +96,7 @@ def find_game_root():
 def has_ue4ss(win64):
     """True only for a UE4SS install that will actually work -- also checks
     for the shared UEHelpers Lua library mods require(), not just the ue4ss/
-    folder's existence. See 1-DOCUMENTATION.md section 5.4 for why that
+    folder's existence. See docs/DOCUMENTATION.md section 5.4 for why that
     distinction matters."""
     ue4ss_dir = os.path.join(win64, "ue4ss")
     if not os.path.isdir(ue4ss_dir):

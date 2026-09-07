@@ -31,7 +31,7 @@ source of confusion.
 ### How it works
 
 The Console tab talks to a small UE4SS Lua mod called ClaudeBridge
-(`mod/ClaudeBridge/Scripts/main.lua`), which must already be installed and
+(`src/mod/ClaudeBridge/Scripts/main.lua`), which must already be installed and
 running inside the game. The flow, every time you press "Run":
 
 1. `overlay_app.py`'s `ConsoleTab` takes what you typed and prepends one
@@ -279,7 +279,7 @@ manage the resulting files.
 ### 3.6 Licensing of plugin files
 
 The Bodycam Overlay application itself (everything in this repo except
-plugin content) is MIT-licensed — see `0-LICENSE`.
+plugin content) is MIT-licensed — see `LICENSE`.
 
 A plugin file you write is your own separate work. This project doesn't
 claim any license over plugin content, and loading someone else's plugin
@@ -358,7 +358,7 @@ Background for anyone reading, maintaining, or forking the source — the
 "why" behind decisions that aren't obvious from the code alone. Per-function
 comments in the source point back here instead of repeating this.
 
-### 5.1 Bridge protocol (`bridge_client.py` ↔ `mod/ClaudeBridge/Scripts/main.lua`)
+### 5.1 Bridge protocol (`bridge_client.py` ↔ `src/mod/ClaudeBridge/Scripts/main.lua`)
 
 File-based RPC, chosen because it needs no open port and no extra
 dependency on either side (game console isn't reachable from Python, and
@@ -448,12 +448,12 @@ change behavior without rebuilding the exe.
 
 ### 5.4 `install_bridge.py` — why bundling UE4SS is on the right side of the line
 
-`ue4ss_bundle/` holds a straight copy of the UE4SS + enabler-mod files that
+`src/ue4ss_bundle/` holds a straight copy of the UE4SS + enabler-mod files that
 were already installed and running on the author's own machine — not
 anything downloaded fresh from the internet at install time. Deploying a
 user's own, already-vetted files to a game folder they own is a different
 thing from an exe silently fetching and planting unknown injection tooling;
-that's the line this stays on the right side of. If `ue4ss_bundle/` is ever
+that's the line this stays on the right side of. If `src/ue4ss_bundle/` is ever
 missing (e.g. a fresh checkout of just the source, without re-running the
 bundling step), setup falls back to pointing at the official UE4SS release
 page instead of guessing.
@@ -535,7 +535,7 @@ stable for years.
 - **About tab**: a plain, editable Python class like anything else — there
   is no way to make credit "tamper-proof" in a project whose source is
   public. The actual, enforceable mechanism for keeping attribution
-  attached is the MIT license itself (see `0-LICENSE`): it requires the
+  attached is the MIT license itself (see `LICENSE`): it requires the
   copyright notice to be kept in any redistributed copy, source or binary.
   The tab exists to make that credit visible, not to prevent someone from
   deleting it.

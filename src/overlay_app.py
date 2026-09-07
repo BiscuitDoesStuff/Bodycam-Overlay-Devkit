@@ -2,7 +2,7 @@
 game process), toggled with the Insert key. Requires the game to run in
 windowed or borderless mode so this window can sit visually on top of it.
 
-Run with:  python overlay_app.py
+Run with:  python src/overlay_app.py
 Requires the game to be running with the ClaudeBridge UE4SS mod loaded.
 """
 import logging
@@ -928,7 +928,7 @@ class SavedButtonsTab(ttk.Frame):
 
 class PluginPreviewDialog(tk.Toplevel):
     """Shows a plugin's name and every button's label/mode/code before it's
-    actually installed. Backs up the safety note in 1-DOCUMENTATION.md §3.7
+    actually installed. Backs up the safety note in docs/DOCUMENTATION.md §3.7
     ("read a plugin's code before adding it") with something to actually
     read right here, instead of just a warning to go find the file yourself
     first."""
@@ -1049,7 +1049,7 @@ class PluginsTab(ttk.Frame):
 
 
 class AboutTab(ttk.Frame):
-    """Credits/license info -- see 1-DOCUMENTATION.md §5.6 for why this tab
+    """Credits/license info -- see docs/DOCUMENTATION.md §5.6 for why this tab
     can't be made "tamper-proof" and what actually enforces attribution."""
 
     def __init__(self, parent, app):
@@ -1064,23 +1064,23 @@ class AboutTab(ttk.Frame):
 
         tk.Label(self, text="Created by clutch5.9", bg=BG, fg=FG,
                  font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=16, pady=(0, 2))
-        tk.Label(self, text="Licensed under the MIT License. See 0-LICENSE in the project folder.",
+        tk.Label(self, text="Licensed under the MIT License. See LICENSE in the project folder.",
                  bg=BG, fg="#888").pack(anchor="w", padx=16, pady=(0, 16))
 
         tk.Label(self, text="Third-party components:", bg=BG, fg=FG,
                  font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=16, pady=(0, 2))
         tk.Label(self, text="RE-UE4SS -- MIT License, Copyright (c) 2022 Narknon\n"
-                             "(bundled under ue4ss_bundle/, see its own LICENSE file)",
+                             "(bundled under src/ue4ss_bundle/, see its own LICENSE file)",
                  bg=BG, fg="#888", justify="left").pack(anchor="w", padx=16, pady=(0, 16))
 
-        tk.Label(self, text="Docs: 1-DOCUMENTATION.md in the project folder explains the Console/"
+        tk.Label(self, text="Docs: docs/DOCUMENTATION.md in the project folder explains the Console/"
                              "Shell tabs, the plugin format, and troubleshooting.",
                  bg=BG, fg="#888", wraplength=600, justify="left").pack(anchor="w", padx=16)
 
 
 class ShellTab(ConsoleShellMixin, ttk.Frame):
     """Runs arbitrary shell scripts locally via Git Bash -- see
-    1-DOCUMENTATION.md §2 for the full safety rationale (no sandboxing, by
+    docs/DOCUMENTATION.md §2 for the full safety rationale (no sandboxing, by
     design)."""
 
     def __init__(self, parent, app):
@@ -1199,7 +1199,7 @@ class App:
 
     def _start_tray_icon(self):
         """A real taskbar/system-tray presence with a proper Exit option --
-        see 1-DOCUMENTATION.md §5.6 for why the window itself only hides."""
+        see docs/DOCUMENTATION.md §5.6 for why the window itself only hides."""
         try:
             image = Image.open(os.path.join(api._HERE, "app_icon.ico")).convert("RGBA")
         except Exception:
@@ -1219,7 +1219,7 @@ class App:
 
     def quit_app(self):
         """Actually terminates the app (the tray's Exit item). Uses os._exit
-        rather than a normal mainloop return -- see 1-DOCUMENTATION.md §5.6."""
+        rather than a normal mainloop return -- see docs/DOCUMENTATION.md §5.6."""
         try:
             self.tray_icon.stop()
         except Exception:
@@ -1233,7 +1233,7 @@ class App:
     def _run_setup_check(self):
         """Runs once at startup: makes sure ClaudeBridge (and, if it's already
         on this machine, the bundled UE4SS copy) is in place before the first
-        connection poll. See install_bridge.py / 1-DOCUMENTATION.md §5.4."""
+        connection poll. See install_bridge.py / docs/DOCUMENTATION.md §5.4."""
         def prompt_for_path():
             messagebox.showinfo(
                 "Bodycam not found",
@@ -1315,7 +1315,7 @@ class App:
 
 
 # Arbitrary fixed local port used purely as a single-instance lock -- binding
-# it is the mutex. See 1-DOCUMENTATION.md §5.6 for what breaks without it.
+# it is the mutex. See docs/DOCUMENTATION.md §5.6 for what breaks without it.
 _SINGLE_INSTANCE_PORT = 47821
 
 
