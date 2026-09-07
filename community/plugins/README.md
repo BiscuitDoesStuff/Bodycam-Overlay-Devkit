@@ -1,4 +1,4 @@
-# Added Plugins by Me
+# Community Plugins
 
 This folder holds Plugin files — JSON files in the format the **Plugins**
 tab loads (a named, shareable bundle of buttons, with optional section
@@ -9,12 +9,13 @@ them.
 
 1. Download the `.json` file you want from this folder.
 2. In the app, go to the **Plugins** tab.
-3. Click **Add Plugin...** and pick the file.
+3. Click **Add Plugin...** and pick the file. A preview shows every button's
+   code before anything is installed.
 4. It shows up as its own sub-tab immediately, and every time the app starts
    from then on.
 
-See [1-DOCUMENTATION.md](../1-DOCUMENTATION.md) §3 for the exact file
-format, how Run Once vs Toggle buttons work, and how to write your own
+See [docs/DOCUMENTATION.md](../../docs/DOCUMENTATION.md) §3 for the exact
+file format, how Run Once vs Toggle buttons work, and how to write your own
 plugin from scratch or by exporting from the Console tab.
 
 ## Contributing a plugin

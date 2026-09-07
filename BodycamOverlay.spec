@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['overlay_app.py'],
+    ['src/overlay_app.py'],
     pathex=[],
     binaries=[],
-    datas=[('families.json', '.'), ('maps.json', '.'), ('gamemodes.json', '.'), ('app_icon.ico', '.'), ('mod', 'mod'), ('ue4ss_bundle', 'ue4ss_bundle')],
+    datas=[('src/families.json', '.'), ('src/maps.json', '.'), ('src/gamemodes.json', '.'), ('src/app_icon.ico', '.'), ('src/mod', 'mod'), ('src/ue4ss_bundle', 'ue4ss_bundle')],
     hiddenimports=['pystray._win32'],
     hookspath=[],
     hooksconfig={},
@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['app_icon.ico'],
+    icon=['src/app_icon.ico'],
 )

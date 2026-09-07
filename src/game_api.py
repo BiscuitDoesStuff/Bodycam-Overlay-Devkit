@@ -3,7 +3,7 @@ gvas2 (Loadout.sav file editing) behind clean functions.
 
 Design rule: individual items (skins, operators, maps found on disk) are always
 pulled live/fresh; only the family->category mapping in families.json is
-hand-maintained (see 1-DOCUMENTATION.md section 5.3 for why). Rationale for
+hand-maintained (see docs/DOCUMENTATION.md section 5.3 for why). Rationale for
 the trickier live-game hacks below (bot fill, explosive bullets, cap/travel
 ordering, cycle_match's map-name matching) is centralized in that same file,
 section 5.5, rather than repeated per function.
@@ -19,7 +19,7 @@ import gvas2
 
 # PyInstaller onefile builds extract bundled data (see build.bat's --add-data)
 # to a temp dir exposed as sys._MEIPASS -- recreated fresh (and wiped) on every
-# launch. Plain `python overlay_app.py` runs use this file's own directory.
+# launch. Plain `python src/overlay_app.py` runs use this file's own directory.
 _HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 SAVE_PATH = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Bodycam", "Saved", "SaveGames", "Loadout.sav")
 
@@ -166,7 +166,7 @@ def list_plugins():
 def preview_plugin(source_path):
     """Reads and validates a plugin file WITHOUT installing it (no copy into
     _PLUGINS_DIR) -- lets the UI show what a plugin's buttons will actually
-    run before the user commits to adding it (1-DOCUMENTATION.md §3.7).
+    run before the user commits to adding it (docs/DOCUMENTATION.md §3.7).
     Returns (plugin_name, raw_data)."""
     with open(source_path, encoding="utf-8") as f:
         data = json.load(f)
@@ -386,7 +386,7 @@ return tostring(ok)
 
 def write_cap(cap, team_size=None, bots=None, timeout=15):
     """Writes MaxPlayers (and optionally TeamMaxSize, HMS_bBotsMethod) only if
-    not in StartRound (see 1-DOCUMENTATION.md §5.5). Returns a status string;
+    not in StartRound (see docs/DOCUMENTATION.md §5.5). Returns a status string;
     caller should check for 'ABORT' and retry."""
     ts_line = f"pcall(function() gm.ConfigDataAsset.TeamConfig.TeamMaxSize={team_size} end)" if team_size is not None else ""
     bots_line = f"pcall(function() gm.HMS_bBotsMethod={str(bool(bots)).lower()} end)" if bots is not None else ""
@@ -422,7 +422,7 @@ def write_cap_retrying(cap, team_size=None, bots=None, attempts=8, delay=2.0, ti
 def spawn_bots_to_target(target_count, timeout=15):
     """Manually fills to target_count via GameMode:SpawnBot(), one per 4s,
     bypassing ShouldSpawnBots()/HMS_bBotsMethod entirely -- see
-    1-DOCUMENTATION.md §5.5 for why. Generation-guarded: calling this again
+    docs/DOCUMENTATION.md §5.5 for why. Generation-guarded: calling this again
     supersedes any fill already in progress rather than stacking a second
     timer."""
     lua = f"""
@@ -460,7 +460,7 @@ def set_explosive_bullets(enabled, damage=50.0, radius=300.0, timeout=15):
     fires on EVERY bullet impact -- and, while enabled, calls the engine's own
     ApplyRadialDamage at the hit location. A hot-path hook, so its guards
     (enabled-check first, one-time registration, pcall-wrapped) are
-    load-bearing, not decorative -- see 1-DOCUMENTATION.md §5.5. Not
+    load-bearing, not decorative -- see docs/DOCUMENTATION.md §5.5. Not
     independently verified against live rapid-fire yet -- test with a few
     individual shots before trusting it in a real firefight."""
     lua = f"""
@@ -542,7 +542,7 @@ def host_and_travel(map_path, gamemode_class, cap, team_size, private, bots, ses
     """Full flow: end current round if in one (wait for it to settle), travel to
     map+mode, then write cap/team AFTER the new mode has loaded -- each gamemode
     has its own persistent cap asset, so writing it only makes sense once the
-    target mode's GameMode instance actually exists (see 1-DOCUMENTATION.md
+    target mode's GameMode instance actually exists (see docs/DOCUMENTATION.md
     §5.5). private=True sets both UpdateLobbyAccessMethod(true) and a session
     password as a second layer; bots=True bypasses HMS_bBotsMethod entirely and
     spawns manually via spawn_bots_to_target() (same section explains why).
@@ -620,7 +620,7 @@ def cycle_match(fallback_map_path=None, private=False, bots=True, timeout=20):
     map_path = None
     if level_name:
         # Mode rotation uses per-mode-prefixed level names, not maps.json's bare
-        # package name -- strip a known prefix before comparing (1-DOCUMENTATION.md §5.5).
+        # package name -- strip a known prefix before comparing (docs/DOCUMENTATION.md §5.5).
         bare = level_name
         for prefix in ("DM_", "TDM_", "GG_", "HP_", "BB_", "VS_", "WM_"):
             if bare.startswith(prefix):
@@ -688,7 +688,7 @@ def _list_backup_filenames():
 def backup_save(keep=20):
     """Copies Loadout.sav to a timestamped .backup-<ts> file alongside it, then
     prunes down to the `keep` most recent backups so these don't accumulate
-    forever (see 1-DOCUMENTATION.md §5.2)."""
+    forever (see docs/DOCUMENTATION.md §5.2)."""
     import shutil, time
     ts = time.strftime("%Y%m%d-%H%M%S")
     dst = SAVE_PATH + f".backup-{ts}"

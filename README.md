@@ -5,22 +5,55 @@ process**. Toggle it with **Insert**. Requires the game to run in **windowed
 or borderless** mode (a separate window can't render on top of exclusive
 fullscreen).
 
-Created by **clutch5.9**. Licensed under the [MIT License](0-LICENSE).
+Created by **clutch5.9**. Licensed under the [MIT License](LICENSE).
+
+## Repo layout
+
+```
+README.md              You're reading it
+LICENSE                 MIT license for this app's own code
+requirements.txt        Python dependencies
+build.bat               Packages src/ into dist/BodycamOverlay.exe
+BodycamOverlay.spec     PyInstaller spec for the same build, if you run it directly
+
+docs/
+  DOCUMENTATION.md      Console/Shell/Plugins reference, troubleshooting, internals
+
+community/
+  buttons/              Shared Saved Command Buttons exports (.json)
+  plugins/              Shared Plugin files (.json)
+
+src/
+  overlay_app.py         Tkinter UI -- all tabs
+  game_api.py            High-level API: bridges live Lua calls + save-file edits
+  bridge_client.py       Talks to ClaudeBridge (file-based RPC into the game)
+  gvas2.py               Loadout.sav binary format reader/writer
+  shell_client.py        Runs Shell tab scripts via Git Bash
+  install_bridge.py      Finds the game, deploys UE4SS + ClaudeBridge
+  smoke_test.py          Manual smoke test against a running game
+  app_icon.ico           App / exe icon
+  families.json, maps.json, gamemodes.json    Hand-curated config (see below)
+  mod/ClaudeBridge/       The UE4SS Lua mod this whole app talks to
+  ue4ss_bundle/           A full copy of RE-UE4SS (MIT-licensed, see its own LICENSE)
+```
+
+Everything the app actually runs lives under `src/` as one self-contained
+unit — it bundles its own copy of the ClaudeBridge UE4SS mod and a full copy
+of UE4SS itself, so `src/` doesn't depend on anything outside itself. Docs,
+community content, and build tooling sit alongside it at the repo root.
 
 ## Setup (one-time)
 
-This folder is self-contained — it bundles its own copy of the ClaudeBridge
-UE4SS mod under `mod/ClaudeBridge/`, and a full copy of UE4SS itself under
-`ue4ss_bundle/`, so it doesn't depend on anything outside this directory.
-
 ```
 pip install -r requirements.txt
-python install_bridge.py
+python src/install_bridge.py
 ```
 
-`install_bridge.py` finds your Bodycam install (or asks for the path). If
-UE4SS isn't already installed there, it deploys the bundled copy; either way
-it then installs/updates the ClaudeBridge mod and adds `ClaudeBridge : 1` to
+`install_bridge.py` finds your Bodycam install — checking every registered
+Steam library folder first, then a short list of common fallback paths — or
+asks for the path if it still can't find it. If UE4SS isn't already
+installed there, it deploys the bundled copy; either way it then
+installs/updates the ClaudeBridge mod and adds `ClaudeBridge : 1` to
 `mods.txt` if it isn't already there. **Fully restart Bodycam afterward** —
 a brand new mod folder isn't picked up by Ctrl+R hot-reload, only a real
 restart. The packaged .exe (see below) runs this same check automatically on
@@ -29,7 +62,7 @@ startup, so most people never need to run this script by hand.
 ## Run it
 
 ```
-python overlay_app.py
+python src/overlay_app.py
 ```
 
 Or run the packaged `dist/BodycamOverlay.exe` (see **Packaging as an .exe**
@@ -73,14 +106,14 @@ after installing the mod.
 - **Set as Active Loadout** calls the game's own `SelectNewCurrentLoadout`.
 - **Restore Backup...** picks from the automatic timestamped backups every
   edit makes and restores one (itself backing up whatever it's about to
-  overwrite first).
+  overwrite first, so it's never a one-way trip).
 
 **Game Speed tab** — Slomo control plus quick 3x speed / reset buttons.
 
 **Console tab** — a raw Lua console into the live game process, with saved
 history and a "Save as Button..." action. See
-**[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §1 for exactly how this works,
-what globals are available, and its safety model.
+**[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)** §1 for exactly how this
+works, what globals are available, and its safety model.
 
 **Saved Command Buttons tab** — every snippet you've saved from the Console
 tab, as a scrollable list of Run Once buttons and Toggle checkboxes. Supports
@@ -91,14 +124,25 @@ set of commands with someone else.
 **Plugins tab** — load a shareable JSON "plugin" file (same shape as a Saved
 Command Buttons export, plus a name and optional section labels/dividers)
 as its own sub-tab. "Add Plugin..." shows a preview of every button's code
-before it's installed. See **[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §3
-for the exact file format, the Run Once vs Toggle mechanism, and how to
+before it's installed. See **[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)**
+§3 for the exact file format, the Run Once vs Toggle mechanism, and how to
 write one from scratch or by exporting from Console.
 
 **Shell tab** — runs raw Bash scripts on your own PC via Git Bash, entirely
-separate from the game. Also covered in **[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §2.
+separate from the game. Also covered in
+**[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)** §2.
 
 **About tab** — credits and license info.
+
+## Sharing buttons & plugins
+
+[`community/buttons/`](community/buttons) and [`community/plugins/`](community/plugins)
+hold shared Saved-Command-Button exports and Plugin files people have
+contributed — download one and Import/Add it from the matching tab. See
+each folder's own README, or **[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)**
+§3, for exactly how. Read a file's `code` fields before adding it — Plugins
+tab shows a preview for this reason, but nothing forces you to actually
+read it.
 
 ## Why some data is hand-maintained (`families.json`)
 
@@ -109,32 +153,18 @@ but **which family belongs to which slot category** is hand-curated in
 modes) since that almost never changes. All three live in
 `%LOCALAPPDATA%\BodycamOverlay\` once the app has run once — edit the copy
 there to change behavior without rebuilding the exe. See
-**[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §5.3 for exactly how to add a
-new weapon family.
+**[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)** §5.3 for exactly how to
+add a new weapon family.
 
 ## Packaging as an .exe
 
 ```
 build.bat
 ```
-Produces `dist\BodycamOverlay.exe`. **Re-run this any time the `.py` or
-`.json` files change** — the exe is a build artifact, the Python source is
-what you actually edit.
-
-## Project layout
-
-```
-overlay_app.py       Tkinter UI -- all tabs
-game_api.py           High-level API: bridges live Lua calls + save-file edits
-bridge_client.py       Talks to ClaudeBridge (file-based RPC into the game)
-gvas2.py                Loadout.sav binary format reader/writer
-shell_client.py        Runs Shell tab scripts via Git Bash
-install_bridge.py      Finds the game, deploys UE4SS + ClaudeBridge
-families.json, maps.json, gamemodes.json    Hand-curated config (see above)
-mod/ClaudeBridge/       The UE4SS Lua mod this whole app talks to
-ue4ss_bundle/            A full copy of RE-UE4SS (MIT-licensed, see its own LICENSE)
-1-DOCUMENTATION.md    Console/Shell/Plugins reference, troubleshooting, and internals
-```
+Produces `dist\BodycamOverlay.exe` from `src/`. **Re-run this any time a file
+under `src/` changes** — the exe is a build artifact, the Python source is
+what you actually edit. Run it from the repo root; `BodycamOverlay.spec`
+does the same build if you'd rather invoke PyInstaller directly.
 
 ## Known limitations / things worth testing more
 
@@ -160,7 +190,8 @@ ue4ss_bundle/            A full copy of RE-UE4SS (MIT-licensed, see its own LICE
 
 ## License
 
-[MIT](0-LICENSE) for this application's own code. The bundled UE4SS under
-`ue4ss_bundle/` carries its own MIT license from its original author. Plugin
+[MIT](LICENSE) for this application's own code (everything under `src/`
+except `src/ue4ss_bundle/`). The bundled UE4SS there carries its own MIT
+license from its original author (`src/ue4ss_bundle/ue4ss/LICENSE`). Plugin
 files people write for the Plugins tab are their own separate work — see
-**[1-DOCUMENTATION.md](1-DOCUMENTATION.md)** §3.6.
+**[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)** §3.6.
