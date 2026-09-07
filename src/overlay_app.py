@@ -422,7 +422,9 @@ class HostTab(ttk.Frame):
         # APlayerState:GetPlayerName() (safe to assume it exists on any UE
         # game). Team assignment isn't shown: no PlayerState property for it
         # has been confirmed live yet.
-        ui.label(right, text="Roster", bg=PANEL, bold=True).pack(anchor="w", padx=PAD, pady=(0, 0))
+        self.roster_label_var = tk.StringVar(value="Roster")
+        self.roster_label = ui.label(right, textvariable=self.roster_label_var, bg=PANEL, bold=True)
+        self.roster_label.pack(anchor="w", padx=PAD, pady=(0, 0))
         self.roster_list = ui.listbox(right, width=28, height=6)
         self.roster_list.pack(padx=PAD, pady=(PAD_SM, PAD_SM))
         ui.button(right, "Refresh Roster", command=self._refresh_roster).pack(fill="x", padx=PAD, pady=(0, PAD))
@@ -633,6 +635,48 @@ class HostTab(ttk.Frame):
             return None
         return sel[0]
 
+    def _guard_other_players(self, action_label, on_proceed):
+        """Checks the live roster before letting a disruptive action through
+        (Load Custom Match / Cycle / Force Round End all route through this).
+        Added 2026-09-07 after a near-miss: we almost ran gamemode-switch
+        tests against a live match that turned out to have 5 real strangers
+        in it, discovered only because the roster panel happened to be
+        checked first. This does a FRESH roster read every time rather than
+        trusting the passive Roster panel label, since that could be stale.
+
+        Doesn't try to distinguish bots you spawned yourself from real other
+        players -- no PlayerState property for that has been confirmed live
+        (see get_player_roster()'s docstring). Erring toward one extra
+        confirm click when it's actually just your own bots is the safe
+        failure mode here; erring the other way is exactly what almost
+        happened. If the roster can't even be read, fail safe by asking
+        rather than silently proceeding."""
+        def work():
+            return api.get_player_roster()
+
+        def done(roster):
+            self._set_roster_label(len(roster))
+            if len(roster) > 1:
+                if messagebox.askyesno(
+                        "Other players connected",
+                        f"{len(roster)} players are currently connected:\n\n"
+                        f"{', '.join(roster)}\n\n"
+                        f"{action_label} will disrupt anyone else in this match "
+                        "(or anyone else's bots -- there's no way yet to tell bots "
+                        "from real players here). Continue?"):
+                    on_proceed()
+            else:
+                on_proceed()
+
+        def err(_e):
+            if messagebox.askyesno(
+                    "Couldn't check who's connected",
+                    "Couldn't read the player roster, so there's no way to confirm "
+                    f"you're alone right now.\n\n{action_label} anyway?"):
+                on_proceed()
+
+        self.app.runner.run(work, done, err)
+
     def _load_match(self):
         name = self._selected_map()
         if not name:
@@ -665,19 +709,22 @@ class HostTab(ttk.Frame):
         private = self.private_var.get()
         bots = self.bots_var.get()
 
-        self.app.status(f"Loading {name} ({mode_name})...")
+        def proceed():
+            self.app.status(f"Loading {name} ({mode_name})...")
 
-        def work():
-            return api.host_and_travel(map_path, gm_class, cap, team or 1, private, bots)
+            def work():
+                return api.host_and_travel(map_path, gm_class, cap, team or 1, private, bots)
 
-        def done(result):
-            self.last_hosted = dict(map_path=map_path, private=private, bots=bots)
-            _save_ui_state({"map": name, "gamemode": mode_name, "cap": cap,
-                             "team": team or 1, "private": private, "bots": bots})
-            self.app.status(f"Loaded {name}: {result}")
-            self.app.root.after(4000, self._refresh_state)
+            def done(result):
+                self.last_hosted = dict(map_path=map_path, private=private, bots=bots)
+                _save_ui_state({"map": name, "gamemode": mode_name, "cap": cap,
+                                 "team": team or 1, "private": private, "bots": bots})
+                self.app.status(f"Loaded {name}: {result}")
+                self.app.root.after(4000, self._refresh_state)
 
-        self.app.runner.run(work, done, self.app.on_error("ERROR loading match"))
+            self.app.runner.run(work, done, self.app.on_error("ERROR loading match"))
+
+        self._guard_other_players("Loading a custom match", proceed)
 
     def _refresh_state(self):
         def work():
@@ -696,31 +743,37 @@ class HostTab(ttk.Frame):
         self.app.runner.run(work, done, self.app.on_error("state check failed"))
 
     def _cycle(self):
-        fallback = self.last_hosted["map_path"] if self.last_hosted else None
-        private = self.last_hosted["private"] if self.last_hosted else False
-        bots = self.last_hosted["bots"] if self.last_hosted else True
-        self.app.status("Cycling current match...")
+        def proceed():
+            fallback = self.last_hosted["map_path"] if self.last_hosted else None
+            private = self.last_hosted["private"] if self.last_hosted else False
+            bots = self.last_hosted["bots"] if self.last_hosted else True
+            self.app.status("Cycling current match...")
 
-        def work():
-            return api.cycle_match(fallback_map_path=fallback, private=private, bots=bots)
+            def work():
+                return api.cycle_match(fallback_map_path=fallback, private=private, bots=bots)
 
-        def done(result):
-            self.app.status(f"Cycled: {result['mode_name']} cap={result['cap']} team={result['team_size']}")
-            self.app.root.after(4000, self._refresh_state)
+            def done(result):
+                self.app.status(f"Cycled: {result['mode_name']} cap={result['cap']} team={result['team_size']}")
+                self.app.root.after(4000, self._refresh_state)
 
-        self.app.runner.run(work, done, self.app.on_error("ERROR cycling"))
+            self.app.runner.run(work, done, self.app.on_error("ERROR cycling"))
+
+        self._guard_other_players("Cycling the current match", proceed)
 
     def _force_end(self):
-        self.app.status("Forcing round end...")
+        def proceed():
+            self.app.status("Forcing round end...")
 
-        def work():
-            return api.force_round_end()
+            def work():
+                return api.force_round_end()
 
-        def done(result):
-            self.app.status(f"Round end: {result}")
-            self.app.root.after(2000, self._refresh_state)
+            def done(result):
+                self.app.status(f"Round end: {result}")
+                self.app.root.after(2000, self._refresh_state)
 
-        self.app.runner.run(work, done, self.app.on_error())
+            self.app.runner.run(work, done, self.app.on_error())
+
+        self._guard_other_players("Forcing the round to end", proceed)
 
     def _refresh_match_info(self):
         def work():
@@ -748,8 +801,20 @@ class HostTab(ttk.Frame):
                 self.roster_list.insert(tk.END, "(none found)")
             for n in names:
                 self.roster_list.insert(tk.END, n)
+            self._set_roster_label(len(names))
 
         self.app.runner.run(work, done, self.app.on_error("roster check failed"))
+
+    def _set_roster_label(self, count):
+        """Passive ambient cue on the Roster header -- doesn't gate anything
+        itself (that's _guard_other_players, checked fresh right before an
+        actually disruptive action), just keeps you aware between actions."""
+        if count > 1:
+            self.roster_label_var.set(f"Roster — ⚠ {count} connected")
+            self.roster_label.configure(fg=BAD)
+        else:
+            self.roster_label_var.set("Roster")
+            self.roster_label.configure(fg=FG)
 
     def _discover_gamemodes(self):
         """Probes for gamemode classes DT_GamemodeInfo/DT_GameModeData list
