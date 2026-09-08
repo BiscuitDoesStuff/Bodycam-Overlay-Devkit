@@ -754,6 +754,78 @@ def teleport_above(timeout=15):
     _cheat("CheatTeleportAbove", timeout)
 
 
+def get_adversary_info(timeout=15):
+    """Read-only info about another connected player via
+    CheatManager:GetRandomAdversary(FSTR_PCInfo&) -- confirmed live
+    (2026-09-07, with a real second player connected) to return that other
+    player's actual FSTR_PCInfo, not an empty/default one: PC and Character
+    were both confirmed non-nil (existence check only, `~= nil`, no methods
+    called on them -- see the crash notes below for why that boundary
+    matters). Team/Stats extraction mirrors get_match_info()'s my_* fields
+    exactly (same safe-field allowlist, same exclusions: never touches
+    PC/Character/SteamID/SkinInfo/BadgeInfo beyond existence, never
+    recurses into KillInfo).
+
+    THIS FUNCTION IS READ-ONLY AND SAFE. Do not use its result as the basis
+    for constructing an argument to AssignTeam/KickPlayer -- passing this
+    exact kind of struct (a real other-player FSTR_PCInfo, unmodified)
+    straight into AssignTeam crashed the game outright, confirmed live,
+    twice (once with a self struct, once with a real second player's
+    struct obtained via this same function). See
+    knowledge_base/CAPABILITIES.md's crash list -- AssignTeam/KickPlayer
+    are not implemented anywhere in this file for this reason. Reading
+    values out of the struct this function returns is fine; feeding that
+    struct into a UFunction argument is not.
+
+    IMPORTANT CAVEAT, confirmed live: this does NOT reliably return None
+    when solo. Tested alone (no other player connected) and it still
+    returned a populated dict (team=0, all stats=0) rather than nothing --
+    `GetRandomAdversary` appears to hand back some struct (possibly your
+    own, possibly an uninitialized-but-present one) even with no one else
+    around, and there's no safe way to tell the difference without
+    inspecting PC/Character, which this function deliberately never does.
+    Practical upshot: a all-zero/blank result here is NOT reliable proof
+    someone else is or isn't present -- cross-check against
+    get_player_roster()'s count for that instead. Only returns None if the
+    call itself errors, which hasn't been observed."""
+    lua = r"""
+local pc = UEHelpers.GetPlayerController()
+local t = {}
+local ok = pcall(function() pc.CheatManager:GetRandomAdversary(t) end)
+if not ok then return 'NONE' end
+local hasAny = false
+for _ in pairs(t) do hasAny = true break end
+if not hasAny then return 'NONE' end
+
+local out = {}
+for k, v in pairs(t) do
+    if k:find('^Team_') then
+        out[#out+1] = 'team=' .. tostring(v)
+    elseif k:find('^Stats_') and type(v) == 'table' then
+        for sk, sv in pairs(v) do
+            if sk:find('^Kill_') then out[#out+1] = 'kills=' .. tostring(sv)
+            elseif sk:find('^Death_') then out[#out+1] = 'deaths=' .. tostring(sv)
+            elseif sk:find('^Score_') then out[#out+1] = 'score=' .. tostring(sv)
+            elseif sk:find('^RankName_') then
+                local ok2, rn = pcall(function() return sv:ToString() end)
+                out[#out+1] = 'rank=' .. (ok2 and rn or 'n/a')
+            end
+        end
+    end
+end
+return table.concat(out, '\n')
+"""
+    body = bc.run_lua(lua, timeout=timeout).strip()
+    if body in ("NONE", ""):
+        return None
+    info = {}
+    for line in body.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            info[k] = v
+    return info
+
+
 # Candidate class paths for gamemodes DT_GamemodeInfo/DT_GameModeData list
 # (Zombie, Pit, Training, OnlyPistol) that aren't in gamemodes.json -- the 7
 # modes already there all live at /Game/GM/Gamemode/GM_<Name>.GM_<Name>_C, so
