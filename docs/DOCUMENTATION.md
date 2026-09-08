@@ -597,6 +597,36 @@ stable for years.
   `no_content` (a class/asset reference with nothing actually implemented
   behind it, confirmed for Training/Zombie/Pit/OnlyPistol) is kept distinct
   from `broken` (engages as the active gamemode but has a real problem).
+- **`list_weather_presets`/`set_weather`**: both the weather object and the
+  `GameState` are re-obtained fresh via `FindAllOf` on every call, never
+  cached or extracted from a struct — confirmed live (set to Rain, then
+  Foggy). `WeatherManagerComponent` is declared on the GameState
+  (`sdk_headers/GT_Base.hpp`), not the Lobby-only GameMode, so unlike
+  `get_match_info`'s extra fields this is expected to also work inside an
+  actual hosted match, though that specific combination hasn't been
+  independently tested.
+- **`kill_self`/`set_game_timer`/`end_round`/`end_match`/`set_invincible`/
+  `set_infinite_ammo`/`teleport_above`**: all thin wrappers around the
+  game's own developer `CheatManager` (`BP_BodycamCheatManager`, reached via
+  `pc.CheatManager` — the same object `SpeedTab`'s Slomo control already
+  used before any of this file's other additions). `CheatKillMyself` and
+  `CheatEndRound` (paired with `CheatSetGameTimer(1.0)`) were confirmed to
+  have a real, observed effect on `get_live_state()`, not just "the call
+  didn't error" — the rest only have that weaker level of confirmation. Also
+  discovered here: a `UFunction` with **multiple** out-parameters
+  (`GetScoreToWin(int32&, int32&)`) flattens all of them into the *first*
+  table argument passed, not one table per parameter.
+- **`AssignTeam`/`KickPlayer` are NOT implemented** — both need a freshly
+  *constructed* nested struct as an input argument (`FSTR_KickVote`
+  wrapping `FSTR_PCInfo`, GUID-mangled field names), categorically
+  different from every pattern confirmed safe elsewhere in this file (which
+  either read a struct back or passed through a live `FindAllOf`-obtained
+  reference untouched). Confirmed live: even round-tripping your own
+  just-read, completely unmodified `FSTR_PCInfo` straight into
+  `AssignTeam(t, 1)` crashed the game outright. See
+  `knowledge_base/CAPABILITIES.md`'s crash list for the full incident and
+  candidate root causes — do not retry either function without a real
+  second connected player and a fresh game restart first.
 
 ### 5.6 `overlay_app.py` — a few non-obvious mechanisms
 
@@ -666,3 +696,19 @@ stable for years.
   `snippets.json`, written on every successful `Load Custom Match`. Restored
   on the next launch so the tab doesn't reset to defaults every time the
   overlay restarts.
+- **Host tab's right column is a scrollable panel**
+  (`_make_scrollable(right_outer, panel=True)`, a fixed-width `width=270`
+  outer frame with `pack_propagate(False)` so the sidebar's width doesn't
+  shrink to fit a Canvas's otherwise-unpredictable requested width) rather
+  than a plain fixed frame — needed once the sidebar grew past Live State/
+  Match Info/Roster/Discover Gamemodes to also fit the Match Control
+  section (weather, round timer, End Round, End Match). `_make_scrollable`
+  gained the `panel=True` parameter for this — it's shared with
+  `SavedButtonsTab`/`PluginsTab`/`PluginPreviewDialog`, which still default
+  to the plain `BG` background.
+- **Match Control's weather/timer/round/match-end buttons all route through
+  `_guard_other_players`**, same as Load Custom Match/Cycle/Force Round
+  End — every one of them affects the whole match, not just the local
+  player. Game Speed tab's Player Cheats section (Kill Self, Invincible,
+  Infinite Ammo, Teleport Above) deliberately does NOT route through it —
+  none of those force anything on anyone else.
