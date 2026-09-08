@@ -613,6 +613,147 @@ return table.concat(out, '\n')
     return roster
 
 
+# --------------------------------------------------------------------------- weather (found via the UE4SS SDK dump, 2026-09-07)
+def list_weather_presets(timeout=15):
+    """Every live UDS_Weather_Settings_C instance's name, found via
+    FindAllOf -- confirmed live: 19 instances, 13 with real names matching
+    DT_WeatherWeight's rows exactly (Clear_Skies, Cloudy, Foggy, Overcast,
+    Partly_Cloudy, Rain, Rain_Light, Rain_Thunderstorm, Sand_Dust_Calm,
+    Sand_Dust_Storm, Snow, Snow_Blizzard, Snow_Light), plus a handful of
+    unnamed `UDS_Weather_Settings_C_N` ones -- those are filtered out here
+    since there's nothing meaningful to pick from a bare index."""
+    lua = r"""
+local out = {}
+for _, w in ipairs(FindAllOf('UDS_Weather_Settings_C') or {}) do
+    local ok, name = pcall(function() return w:GetFName():ToString() end)
+    if ok and name and not name:find('^UDS_Weather_Settings_C_%d+$') then
+        out[#out+1] = name
+    end
+end
+return table.concat(out, '\n')
+"""
+    body = bc.run_lua(lua, timeout=timeout).strip()
+    return sorted(l.strip() for l in body.splitlines() if l.strip())
+
+
+def set_weather(name, transition_seconds=3.0, timeout=15):
+    """Forces a weather transition via
+    GameState.WeatherManagerComponent:StartWeatherTransition(weather_obj,
+    seconds). Confirmed live 2026-09-07 (set to 'Rain' from the Lobby, game
+    stayed stable). WeatherManagerComponent is declared on GT_Base (the
+    GameState), not the Lobby's GameMode -- unlike get_match_info()'s
+    Lobby-only fields, this SHOULD also work from inside an actual hosted
+    match, but that specific combination hasn't been independently tested.
+    `name` must be one of list_weather_presets()'s results; both `name`
+    lookup and the weather object itself use only FindAllOf-obtained live
+    instances, never a struct-extracted reference, so this doesn't touch
+    any of the crash-prone patterns documented elsewhere in this file."""
+    lua = f"""
+local target = nil
+for _, w in ipairs(FindAllOf('UDS_Weather_Settings_C') or {{}}) do
+    local ok, wname = pcall(function() return w:GetFName():ToString() end)
+    if ok and wname == {name!r} then target = w break end
+end
+if not target then return 'NOTFOUND' end
+local gs = (FindAllOf('GameStateBase') or {{}})[1]
+if not gs then return 'NOGS' end
+local ok, err = pcall(function()
+    gs.WeatherManagerComponent:StartWeatherTransition(target, {float(transition_seconds)})
+end)
+return ok and 'OK' or ('ERR: ' .. tostring(err))
+"""
+    result = bc.run_lua(lua, timeout=timeout).strip()
+    if result == "NOTFOUND":
+        raise ValueError(f"Weather preset {name!r} not found live -- see list_weather_presets()")
+    if result == "NOGS":
+        raise RuntimeError("No GameState found -- is the bridge connected?")
+    if result != "OK":
+        raise RuntimeError(result)
+
+
+# --------------------------------------------------------------------------- CheatManager (BP_BodycamCheatManager, found via the UE4SS SDK dump, 2026-09-07)
+# The game ships its own developer cheat menu, reachable the same way
+# SpeedTab's Slomo already reaches it: `pc.CheatManager:SomeFunction()`. All
+# of the functions wrapped below were confirmed live (2026-09-07, solo, from
+# the Lobby) to call successfully with no error and no crash -- see each
+# function's own docstring for exactly what was independently observed
+# versus just "the call didn't error."
+def _cheat(fn_name, timeout=15):
+    lua = f"""
+local pc = UEHelpers.GetPlayerController()
+local ok, err = pcall(function() pc.CheatManager:{fn_name}() end)
+return ok and 'OK' or ('ERR: ' .. tostring(err))
+"""
+    result = bc.run_lua(lua, timeout=timeout).strip()
+    if result != "OK":
+        raise RuntimeError(result)
+
+
+def kill_self(timeout=15):
+    """CheatManager:CheatKillMyself() -- confirmed live: killed the local
+    character, game stayed stable and responsive afterward (normal match
+    death/respawn flow, not a crash)."""
+    _cheat("CheatKillMyself", timeout)
+
+
+def set_game_timer(seconds, timeout=15):
+    """CheatManager:CheatSetGameTimer(seconds) -- sets the current round's
+    timer, e.g. to skip a slow pre-match/warmup countdown by setting it low.
+    Confirmed live the call succeeds; its real effect was observed
+    indirectly (see end_round()'s docstring -- called together with this in
+    the same test) rather than watched in isolation for this specific call."""
+    lua = f"""
+local pc = UEHelpers.GetPlayerController()
+local ok, err = pcall(function() pc.CheatManager:CheatSetGameTimer({float(seconds)}) end)
+return ok and 'OK' or ('ERR: ' .. tostring(err))
+"""
+    result = bc.run_lua(lua, timeout=timeout).strip()
+    if result != "OK":
+        raise RuntimeError(result)
+
+
+def end_round(timeout=15):
+    """CheatManager:CheatEndRound() -- confirmed live: called (immediately
+    after also calling set_game_timer(1.0)) while a Deathmatch match existed
+    in the background; get_live_state() moved GM_Deathmatch_C phase
+    EndMatch -> (a few seconds later) WaitingForPlayers, i.e. it drove a
+    real round-end-and-restart cycle, not a no-op. A cleaner alternative to
+    force_round_end()'s OverrideScoreLimit trick wherever CheatManager is
+    reachable."""
+    _cheat("CheatEndRound", timeout)
+
+
+def end_match(victory=True, timeout=15):
+    """CheatManager:CheatEndGameVictory() / CheatEndGameDefeat() -- NOT
+    individually confirmed live (end_round() was the one actually exercised
+    end-to-end) but the exact same proven zero-arg CheatManager call
+    pattern as kill_self()/end_round()/etc."""
+    _cheat("CheatEndGameVictory" if victory else "CheatEndGameDefeat", timeout)
+
+
+def set_invincible(timeout=15):
+    """CheatManager:CheatSetInvincible() -- confirmed live the call succeeds
+    with no error; the actual gameplay effect (does it prevent damage) was
+    not independently confirmed by taking damage afterward. Named like a
+    toggle, but that's not verified either -- calling it twice might not
+    turn it back off."""
+    _cheat("CheatSetInvincible", timeout)
+
+
+def set_infinite_ammo(timeout=15):
+    """CheatManager:CheatInfiniteAmmo() -- confirmed live the call succeeds;
+    same "effect not independently re-verified, toggle behavior assumed
+    from the name only" caveat as set_invincible()."""
+    _cheat("CheatInfiniteAmmo", timeout)
+
+
+def teleport_above(timeout=15):
+    """CheatManager:CheatTeleportAbove() -- confirmed live the call
+    succeeds; the name is unambiguous but the actual teleport wasn't
+    independently confirmed by checking the pawn's location before/after."""
+    _cheat("CheatTeleportAbove", timeout)
+
+
 # Candidate class paths for gamemodes DT_GamemodeInfo/DT_GameModeData list
 # (Zombie, Pit, Training, OnlyPistol) that aren't in gamemodes.json -- the 7
 # modes already there all live at /Game/GM/Gamemode/GM_<Name>.GM_<Name>_C, so
