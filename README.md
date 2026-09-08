@@ -5,7 +5,11 @@ process**. Toggle it with **Insert**. Requires the game to run in **windowed
 or borderless** mode (a separate window can't render on top of exclusive
 fullscreen).
 
-Created by **clutch5.9**. Licensed under the [MIT License](LICENSE).
+Original project created by **clutch5.9**. This fork, **BDT Overlay Fork**,
+is maintained by **BiscuitDoesStuff** —
+[github.com/BiscuitDoesStuff/BDT-Overlay-Fork](https://github.com/BiscuitDoesStuff/BDT-Overlay-Fork).
+Licensed under the [MIT License](LICENSE); the original copyright notice is
+preserved as the license requires.
 
 ## Repo layout
 
