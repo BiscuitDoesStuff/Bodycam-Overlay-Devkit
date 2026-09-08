@@ -313,8 +313,10 @@ class HostTab(ttk.Frame):
 
         left = ui.frame(self)
         left.pack(side="left", fill="both", expand=True, padx=PAD, pady=PAD)
-        right = ui.frame(self, panel=True)
-        right.pack(side="right", fill="y", padx=(0, PAD), pady=PAD)
+        right_outer = ui.frame(self, panel=True, width=270)
+        right_outer.pack(side="right", fill="y", padx=(0, PAD), pady=PAD)
+        right_outer.pack_propagate(False)
+        right = _make_scrollable(right_outer, panel=True)
 
         ui.label(left, text="Map", bold=True).pack(anchor="w")
 
@@ -441,8 +443,53 @@ class HostTab(ttk.Frame):
         ui.button(right, "Discover More Gamemodes...", command=self._discover_gamemodes).pack(
             fill="x", padx=PAD, pady=(0, PAD))
 
+        ttk.Separator(right, orient="horizontal").pack(fill="x", padx=PAD, pady=(0, PAD))
+
+        # Match Control -- found via the UE4SS SDK dump (2026-09-07), not
+        # reflection guesswork: the game ships its own developer CheatManager
+        # (pc.CheatManager, same object SpeedTab's Slomo already reaches) and
+        # a real weather-forcing path (GameState.WeatherManagerComponent).
+        # All confirmed live individually (see game_api.py's docstrings for
+        # exactly what was independently observed vs. just "didn't error").
+        # Every action here affects the whole match, not just you, so all of
+        # them route through _guard_other_players the same as Load Custom
+        # Match / Cycle / Force Round End.
+        ui.label(right, text="Match Control", bg=PANEL, bold=True).pack(
+            anchor="w", padx=PAD, pady=(0, 0))
+
+        weather_row = ui.frame(right, panel=True)
+        weather_row.pack(fill="x", padx=PAD, pady=(PAD_SM, PAD_SM))
+        self.weather_var = tk.StringVar()
+        self.weather_cb = ttk.Combobox(weather_row, textvariable=self.weather_var,
+                                        state="readonly", width=14)
+        self.weather_cb.pack(side="left", fill="x", expand=True)
+        ui.button(weather_row, "Set Weather", command=self._set_weather).pack(
+            side="left", padx=(PAD_SM, 0))
+        ui.button(right, "Refresh Weather List", command=self._refresh_weather_list).pack(
+            fill="x", padx=PAD)
+
+        timer_row = ui.frame(right, panel=True)
+        timer_row.pack(fill="x", padx=PAD, pady=(PAD, PAD_SM))
+        ui.label(timer_row, text="Timer (s)", bg=PANEL).pack(side="left")
+        self.game_timer_var = tk.IntVar(value=1)
+        ui.spinbox(timer_row, from_=0, to=600, textvariable=self.game_timer_var, width=6).pack(
+            side="left", padx=(PAD_SM, PAD_SM))
+        ui.button(timer_row, "Set (Skip Pre-Match)", command=self._set_game_timer).pack(
+            side="left", fill="x", expand=True)
+
+        ui.button(right, "End Round", command=self._end_round).pack(
+            fill="x", padx=PAD, pady=(PAD_SM, 0))
+
+        end_match_row = ui.frame(right, panel=True)
+        end_match_row.pack(fill="x", padx=PAD, pady=(PAD_SM, PAD))
+        ui.button(end_match_row, "End Match: Win", command=lambda: self._end_match(True)).pack(
+            side="left", fill="x", expand=True, padx=(0, PAD_SM // 2))
+        ui.button(end_match_row, "End Match: Lose", command=lambda: self._end_match(False)).pack(
+            side="left", fill="x", expand=True, padx=(PAD_SM // 2, 0))
+
         self._populate_map_tree()
         self._populate_gamemode_tree()
+        self._refresh_weather_list()
         self._apply_saved_state()
         self._refresh_state()
 
@@ -835,6 +882,85 @@ class HostTab(ttk.Frame):
             self.roster_label_var.set("Roster")
             self.roster_label.configure(fg=FG)
 
+    def _refresh_weather_list(self):
+        def work():
+            return api.list_weather_presets()
+
+        def done(names):
+            self.weather_cb.configure(values=names)
+            if names and not self.weather_var.get():
+                self.weather_var.set(names[0])
+
+        self.app.runner.run(work, done, self.app.on_error("weather list failed"))
+
+    def _set_weather(self):
+        name = self.weather_var.get()
+        if not name:
+            messagebox.showwarning("No weather selected", "Pick a weather preset first.")
+            return
+
+        def proceed():
+            self.app.status(f"Setting weather to {name}...")
+
+            def work():
+                return api.set_weather(name)
+
+            def done(_result):
+                self.app.status(f"Weather set to {name}")
+
+            self.app.runner.run(work, done, self.app.on_error("ERROR setting weather"))
+
+        self._guard_other_players(f"Changing the weather to {name}", proceed)
+
+    def _set_game_timer(self):
+        seconds = self.game_timer_var.get()
+
+        def proceed():
+            self.app.status(f"Setting round timer to {seconds}s...")
+
+            def work():
+                return api.set_game_timer(seconds)
+
+            def done(_result):
+                self.app.status(f"Round timer set to {seconds}s")
+                self.app.root.after(2000, self._refresh_state)
+
+            self.app.runner.run(work, done, self.app.on_error("ERROR setting timer"))
+
+        self._guard_other_players(f"Setting the round timer to {seconds}s", proceed)
+
+    def _end_round(self):
+        def proceed():
+            self.app.status("Ending round (CheatEndRound)...")
+
+            def work():
+                return api.end_round()
+
+            def done(_result):
+                self.app.status("Round ended")
+                self.app.root.after(3000, self._refresh_state)
+
+            self.app.runner.run(work, done, self.app.on_error("ERROR ending round"))
+
+        self._guard_other_players("Ending the current round", proceed)
+
+    def _end_match(self, victory):
+        label = "Win" if victory else "Lose"
+
+        def proceed():
+            self.app.status(f"Ending match ({label})...")
+
+            def work():
+                return api.end_match(victory)
+
+            def done(_result):
+                self.app.status(f"Match ended ({label})")
+                self.app.root.after(3000, self._refresh_state)
+
+            self.app.runner.run(work, done, self.app.on_error("ERROR ending match"))
+
+        self._guard_other_players(f"Ending the match ({label})", proceed)
+
     def _discover_gamemodes(self):
         """Probes for gamemode classes DT_GamemodeInfo/DT_GameModeData list
         (Zombie, Pit, Training, OnlyPistol) that aren't in gamemodes.json yet,
@@ -1139,7 +1265,72 @@ class SpeedTab(ttk.Frame):
         ui.button(self, "Refresh Current Speed", command=self._refresh_current).pack(
             anchor="w", padx=PAD, pady=(PAD_SM, 0))
 
+        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=PAD, pady=(PAD_LG, PAD_SM))
+
+        # Player Cheats -- the game's own developer CheatManager (found via
+        # the UE4SS SDK dump, 2026-09-07), reached the exact same way Slomo
+        # above already does: pc.CheatManager:SomeFunction(). Self-only, so
+        # unlike Host tab's Match Control section these don't go through
+        # _guard_other_players -- none of them force anything on anyone else.
+        # See game_api.py's kill_self/set_invincible/set_infinite_ammo/
+        # teleport_above docstrings for exactly what was independently
+        # confirmed live vs. just "the call didn't error."
+        ui.label(self, text="Player Cheats", header=True).pack(anchor="w", padx=PAD, pady=(0, PAD_SM))
+        cheat_frame = ui.frame(self)
+        cheat_frame.pack(fill="x", padx=PAD, pady=(0, PAD_SM))
+        ui.button(cheat_frame, "Kill Self", outline=True, command=self._kill_self).pack(
+            side="left", padx=(0, PAD_SM))
+        ui.button(cheat_frame, "Invincible", command=self._set_invincible).pack(
+            side="left", padx=(0, PAD_SM))
+        ui.button(cheat_frame, "Infinite Ammo", command=self._set_infinite_ammo).pack(
+            side="left", padx=(0, PAD_SM))
+        ui.button(cheat_frame, "Teleport Above", command=self._teleport_above).pack(side="left")
+
         self._refresh_current()
+
+    def _kill_self(self):
+        self.app.status("Killing self...")
+
+        def work():
+            return api.kill_self()
+
+        def done(_result):
+            self.app.status("Killed self")
+
+        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+
+    def _set_invincible(self):
+        self.app.status("Toggling invincibility...")
+
+        def work():
+            return api.set_invincible()
+
+        def done(_result):
+            self.app.status("Invincibility toggled (not independently confirmed which state it's now in)")
+
+        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+
+    def _set_infinite_ammo(self):
+        self.app.status("Toggling infinite ammo...")
+
+        def work():
+            return api.set_infinite_ammo()
+
+        def done(_result):
+            self.app.status("Infinite ammo toggled (not independently confirmed which state it's now in)")
+
+        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+
+    def _teleport_above(self):
+        self.app.status("Teleporting above...")
+
+        def work():
+            return api.teleport_above()
+
+        def done(_result):
+            self.app.status("Teleported above")
+
+        self.app.runner.run(work, done, self.app.on_error("ERROR"))
 
     def _set_speed(self, value):
         run_cheat_snippet(self.app, f"pc.CheatManager:Slomo({value})",
@@ -1298,14 +1489,17 @@ class ConsoleTab(ConsoleShellMixin, ttk.Frame):
         self.app.runner.run(work, done, err)
 
 
-def _make_scrollable(parent):
+def _make_scrollable(parent, panel=False):
     """Standard scrollable-frame pattern: a Canvas + inner Frame that grows
     with its contents and scrolls with a Scrollbar or the mouse wheel (bound
     only while the cursor is over this canvas, so it doesn't hijack scrolling
-    on other tabs). Returns the inner frame to pack widgets into."""
-    canvas = tk.Canvas(parent, bg=BG, highlightthickness=0)
+    on other tabs). Returns the inner frame to pack widgets into. Pass
+    panel=True to use the PANEL background instead of BG (matches a
+    panel=True parent frame, e.g. HostTab's right column)."""
+    bg = PANEL if panel else BG
+    canvas = tk.Canvas(parent, bg=bg, highlightthickness=0)
     vsb = ui.scrollbar(parent, orient="vertical", command=canvas.yview)
-    inner = ui.frame(canvas)
+    inner = ui.frame(canvas, panel=panel)
     inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
     win = canvas.create_window((0, 0), window=inner, anchor="nw")
     canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))

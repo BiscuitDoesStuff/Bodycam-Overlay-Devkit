@@ -117,6 +117,13 @@ after installing the mod.
 - **Discover More Gamemodes...** probes for gamemode classes the game's data
   references but that aren't in `gamemodes.json` yet, and offers to add any
   it finds (listed as Untested until confirmed).
+- **Match Control**: force a weather change (pick from every live weather
+  preset the game has — Rain, Snow, Foggy, Clear Skies, etc.), set the round
+  timer directly (e.g. to skip a slow pre-match countdown), end the current
+  round, or end the match outright as a win or a loss. All four reach the
+  game's own developer cheat menu, and — like Load Custom Match / Cycle /
+  Force Round End — check the live roster first and confirm before doing
+  anything if someone besides you is connected.
 
 **Loadout Editor tab**
 - Pick any of your loadouts (count is read from the save file, not
@@ -133,6 +140,10 @@ after installing the mod.
   overwrite first, so it's never a one-way trip).
 
 **Game Speed tab** — Slomo control plus quick 3x speed / reset buttons.
+Also has **Player Cheats** (Kill Self, Invincible, Infinite Ammo, Teleport
+Above), reaching the game's own developer cheat menu the same way Slomo
+does — self-only, so these don't ask for confirmation the way Host tab's
+match-wide actions do.
 
 **Saved Command Buttons tab** — every snippet you've saved from the Console
 tab, grouped by category, as a scrollable list of Run Once buttons and
