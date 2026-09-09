@@ -48,7 +48,18 @@ knowledge_base/
                             maps, gamemodes, live state snapshots
 community/                  Shared Saved-Command-Button and Plugin exports
 src/
-  overlay_app.py            Tkinter UI -- every tab
+  overlay_app.py            Entry point -- App class, tray icon, single-
+                            instance lock, __main__. One file per tab lives
+                            alongside it: tab_host.py, tab_loadout.py,
+                            tab_speed.py, tab_saved_buttons.py, tab_testing.py,
+                            tab_console.py, tab_plugins.py, tab_shell.py,
+                            tab_about.py. ui_common.py holds what's shared
+                            across 2+ of them (AsyncRunner, PickerDialog,
+                            SaveButtonDialog, render_command_widgets,
+                            ConsoleShellMixin, _make_scrollable, ui-state
+                            persistence). Split 2026-09-09 from one ~2,600-line
+                            overlay_app.py -- pure reorganization, no behavior
+                            change.
   ui_theme.py                Central palette/fonts/spacing + widget factories
   game_api.py                High-level API: live Lua calls + save-file edits
   bridge_client.py           Talks to the ClaudeBridge UE4SS mod (file-based RPC)

@@ -15,6 +15,11 @@ preserved as the license requires.
 
 ```
 README.md              You're reading it
+CLAUDE.md               Shared context for AI sessions working on this repo --
+                        project scope, architecture, confirmed-working vs.
+                        confirmed-NOT-working capabilities, known crash
+                        classes, UE4SS/Lua gotchas. Read this first if you're
+                        picking up this codebase cold, human or AI.
 LICENSE                 MIT license for this app's own code
 requirements.txt        Python dependencies
 build.bat               Packages src/ into dist/BodycamOverlay.exe
@@ -33,7 +38,18 @@ community/
   plugins/              Shared Plugin files (.json)
 
 src/
-  overlay_app.py         Tkinter UI -- all tabs
+  overlay_app.py         Entry point -- the App class, tray icon, single-
+                        instance lock, and the __main__ block. Run this.
+  tab_host.py             Host / Create Match tab
+  tab_loadout.py          Loadout Editor tab (Currency & Unlocks included)
+  tab_speed.py            Game Speed tab (Slomo, Player Cheats, Perk Cooldown)
+  tab_saved_buttons.py    Saved Command Buttons tab
+  tab_testing.py          Testing tab
+  tab_console.py          Console tab
+  tab_plugins.py          Plugins tab
+  tab_shell.py            Shell tab
+  tab_about.py            About tab
+  ui_common.py            Shared dialogs/mixins/helpers used by 2+ tabs above
   ui_theme.py             Central theme (palette/fonts/spacing) + widget factories
   game_api.py            High-level API: bridges live Lua calls + save-file edits
   bridge_client.py       Talks to ClaudeBridge (file-based RPC into the game)
@@ -169,7 +185,16 @@ after installing the mod.
 Also has **Player Cheats** (Kill Self, Invincible, Infinite Ammo, Teleport
 Above), reaching the game's own developer cheat menu the same way Slomo
 does — self-only, so these don't ask for confirmation the way Host tab's
-match-wide actions do.
+match-wide actions do. **Kill Self / Invincible / Infinite Ammo are
+confirmed, via real-gameplay testing, to have no actual effect** despite
+calling with no error — left in the UI as harmless no-ops rather than
+removed; see `knowledge_base/CAPABILITIES.md` for the full story (including
+why "the call didn't error" isn't proof of anything). **Perk / Gadget
+Cooldown**, below that, is a genuinely working feature: **Clear Cooldown
+Now** clears whatever gadget cooldown (e.g. the FPV drone's) is currently
+running, and **Auto-Clear** repeats that on a timer, since the effect only
+clears the *current* cooldown instance rather than disabling the system —
+it has to be reapplied every time a new cooldown starts.
 
 **Saved Command Buttons tab** — every snippet you've saved from the Console
 tab, grouped by category, as a scrollable list of Run Once buttons and
@@ -179,6 +204,17 @@ run this way is always turned ON). Supports per-button delete and
 recategorize, and **Import** / **Export All** / **Export Selected** (via a
 checkbox next to each button) using JSON files, so you can share a set of
 commands with someone else — categories survive import/export.
+
+**Testing tab** — a research scratchpad: one-click buttons for functions
+found via SDK-dump digging, before deciding whether any are worth
+promoting into a real tab. Where a cheap readable value exists (own
+health/team, a team's score, whether the match has started), a button
+reads it before and after the call and reports whether it actually
+changed, not just whether the call errored — see `CLAUDE.md`'s
+"Confirmed NOT working" section for exactly why that distinction matters.
+Some rows need an actual hosted match, and the GameMode-touching ones are
+host-only (they safely skip, rather than crash, if you're a non-hosting
+client) — both are labeled accordingly.
 
 **Console tab** — a raw Lua console into the live game process, with saved
 history and a "Save as Button..." action. See

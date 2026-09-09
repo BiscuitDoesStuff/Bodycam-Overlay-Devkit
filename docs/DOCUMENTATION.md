@@ -624,6 +624,21 @@ stable for years.
   discovered here: a `UFunction` with **multiple** out-parameters
   (`GetScoreToWin(int32&, int32&)`) flattens all of them into the *first*
   table argument passed, not one table per parameter.
+- **`disable_perk_cooldown`**: unlike everything else in this section, this
+  calls a real Server RPC (`pc['Server - CheatDisablePerkCooldown'](pc)`,
+  bracket-syntax because of the literal space in the UFunction's name — see
+  §5.6/CLAUDE.md's calling-convention notes), not a plain `CheatManager`
+  function. Confirmed live, by direct in-game observation, to genuinely
+  clear an in-progress gadget cooldown — but it is NOT a persistent
+  toggle, it only clears whatever cooldown is running *right now*, so it
+  has to be re-applied for every new cooldown instance. `SpeedTab`'s
+  "Auto-Clear" checkbox exists specifically to work around that by
+  re-calling this on a timer instead of requiring a manual re-click after
+  every gadget redeploy. Also worth remembering: the obvious numeric check
+  for this (`PlayerState:GetRemainingGadgetCooldown()` before/after) is
+  NOT a reliable way to verify it — that value just ticks down with real
+  elapsed time regardless of this call, which looked like "no effect"
+  until directly contradicted by watching the actual gadget in-game.
 - **`AssignTeam`/`KickPlayer` are NOT implemented** — both need a freshly
   *constructed* nested struct as an input argument (`FSTR_KickVote`
   wrapping `FSTR_PCInfo`, GUID-mangled field names), categorically
@@ -727,7 +742,21 @@ stable for years.
     which is easy to mistake for "these functions aren't reachable" when
     the real issue is "there's nothing to call them on yet."
 
-### 5.6 `overlay_app.py` — a few non-obvious mechanisms
+### 5.6 The UI layer — a few non-obvious mechanisms
+
+What was originally one large `overlay_app.py` is now split into
+`overlay_app.py` (the `App` class, tray icon, single-instance lock, and
+the `__main__` entry point) plus one `tab_*.py` module per tab
+(`tab_host.py`, `tab_loadout.py`, `tab_speed.py`, `tab_testing.py`,
+`tab_console.py`, `tab_saved_buttons.py`, `tab_plugins.py`, `tab_shell.py`,
+`tab_about.py`) and `ui_common.py` for the dialogs/mixins/helpers shared
+across two or more of them (`AsyncRunner`, `PickerDialog`,
+`SaveButtonDialog`, `render_command_widgets`, `ConsoleShellMixin`,
+`_make_scrollable`, `_load_ui_state`/`_save_ui_state`). Splitting it this
+way keeps each tab self-contained and reviewable on its own, without
+changing any behavior — every note below still applies exactly as
+written, just note which file the thing being described actually lives in
+now if it's not obvious from context.
 
 - **Single-instance lock**: binding a fixed local TCP port (`47821`) is
   used purely as a mutex — a second launch failing to bind means an

@@ -1,0 +1,239 @@
+"""Game Speed tab: Slomo, Player Cheats, Perk/Gadget Cooldown."""
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+
+import game_api as api
+import ui_theme as ui
+from ui_theme import BG, PANEL, INPUT, FG, MUTED, ACCENT, GOOD, BAD, PAD, PAD_SM, PAD_LG
+
+
+def run_cheat_snippet(app, snippet, on_extra_done=None):
+    """Used by SpeedTab: run a snippet as `pc.<...>`, echo it into
+    the Console tab's log either way, no appended `return` (a saved custom
+    snippet might already end with its own, and Lua only allows one at the end
+    of a block)."""
+    app.status(f"Running: {snippet}")
+
+    def work():
+        return api.run_raw_lua("local pc = UEHelpers.GetPlayerController()\n" + snippet)
+
+    def done(result):
+        app.status(f"Ran: {snippet}")
+        if hasattr(app, "console_tab"):
+            app.console_tab._log(f">>> [cheat] {snippet}", "cmd")
+            app.console_tab._log(result.strip() if result.strip() else "ok", "ok")
+        if on_extra_done:
+            on_extra_done(result)
+
+    def err(e):
+        app.status(f"ERROR: {e}", bad=True)
+        if hasattr(app, "console_tab"):
+            app.console_tab._log(f">>> [cheat] {snippet}", "cmd")
+            app.console_tab._log(f"ERROR: {e}", "err")
+
+    app.runner.run(work, done, err)
+
+
+class SpeedTab(ttk.Frame):
+    """Game-speed controls (Slomo), split out on their own."""
+
+    PRESETS = [0.10, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0]
+
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+
+        ui.label(self, text="Game Speed (Slomo)", header=True).pack(anchor="w", padx=PAD, pady=(PAD, PAD_SM))
+
+        preset_frame = ui.frame(self)
+        preset_frame.pack(fill="x", padx=PAD, pady=PAD_SM)
+        for val in self.PRESETS:
+            label = "Normal (1x)" if val == 1.0 else f"{val}x"
+            ui.button(preset_frame, label, width=10,
+                      command=lambda v=val: self._set_speed(v)).pack(side="left", padx=3, pady=3)
+
+        custom_frame = ui.frame(self)
+        custom_frame.pack(fill="x", padx=PAD, pady=(PAD_LG, PAD_SM))
+        ui.label(custom_frame, text="Custom:").pack(side="left")
+        self.custom_var = tk.StringVar(value="1.0")
+        ui.entry(custom_frame, textvariable=self.custom_var, width=8).pack(side="left", padx=PAD_SM + 2)
+        ui.button(custom_frame, "Set", kind="accent", command=self._set_custom_speed).pack(side="left")
+
+        self.current_lbl = ui.label(self, text="Current TimeDilation: unknown", muted=True)
+        self.current_lbl.pack(anchor="w", padx=PAD, pady=(PAD_LG, 0))
+        ui.button(self, "Refresh Current Speed", command=self._refresh_current).pack(
+            anchor="w", padx=PAD, pady=(PAD_SM, 0))
+
+        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=PAD, pady=(PAD_LG, PAD_SM))
+
+        # Player Cheats -- the game's own developer CheatManager (found via
+        # the UE4SS SDK dump, 2026-09-07), reached the exact same way Slomo
+        # above already does: pc.CheatManager:SomeFunction(). Self-only, so
+        # unlike Host tab's Match Control section these don't go through
+        # _guard_other_players -- none of them force anything on anyone else.
+        # See game_api.py's kill_self/set_invincible/set_infinite_ammo/
+        # teleport_above docstrings for exactly what was independently
+        # confirmed live vs. just "the call didn't error."
+        ui.label(self, text="Player Cheats", header=True).pack(anchor="w", padx=PAD, pady=(0, PAD_SM))
+        ui.info_banner(
+            self, title="Kill Self / Invincible / Infinite Ammo confirmed NOT working",
+            text="All three calls succeed with no error, but real-gameplay testing confirmed "
+                 "they have no actual effect -- self didn't die, damage wasn't prevented, ammo "
+                 "wasn't infinite. Left in the UI since they're harmless, not removed, but don't "
+                 "expect anything to happen. Teleport Above's real effect is still unconfirmed "
+                 "either way (not tested as carefully).",
+        ).pack(fill="x", padx=PAD, pady=(0, PAD_SM))
+        cheat_frame = ui.frame(self)
+        cheat_frame.pack(fill="x", padx=PAD, pady=(0, PAD_SM))
+        ui.button(cheat_frame, "Kill Self", outline=True, command=self._kill_self).pack(
+            side="left", padx=(0, PAD_SM))
+        ui.button(cheat_frame, "Invincible", command=self._set_invincible).pack(
+            side="left", padx=(0, PAD_SM))
+        ui.button(cheat_frame, "Infinite Ammo", command=self._set_infinite_ammo).pack(
+            side="left", padx=(0, PAD_SM))
+        ui.button(cheat_frame, "Teleport Above", command=self._teleport_above).pack(side="left")
+
+        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=PAD, pady=(PAD_LG, PAD_SM))
+
+        # Perk/Gadget Cooldown -- unlike the four cheats above, this one is
+        # a real, confirmed-working Server RPC (found via the same SDK-dump
+        # digging, but this one actually does something -- see
+        # knowledge_base/CAPABILITIES.md's "Server - CheatDisablePerkCooldown
+        # DOES work" correction). It has to be re-applied for every new
+        # cooldown instance, not just once, so Auto-Clear exists to do that
+        # on a timer instead of needing a manual re-click after every
+        # gadget redeploy.
+        ui.label(self, text="Perk / Gadget Cooldown", header=True).pack(anchor="w", padx=PAD, pady=(0, PAD_SM))
+        ui.info_banner(
+            self, title="Confirmed working -- must be reapplied per cooldown instance",
+            text="Server RPC, not a plain CheatManager call -- confirmed live to clear an "
+                 "in-progress gadget cooldown (tested against the FPV drone's 90s cooldown). "
+                 "NOT a one-time toggle: it only clears whatever cooldown is running right now, "
+                 "so it has to be called again every time a new cooldown starts (e.g. each "
+                 "redeploy). Use Auto-Clear below instead of manually re-clicking after every use.",
+        ).pack(fill="x", padx=PAD, pady=(0, PAD_SM))
+        perk_frame = ui.frame(self)
+        perk_frame.pack(fill="x", padx=PAD, pady=(0, PAD_SM))
+        ui.button(perk_frame, "Clear Cooldown Now", kind="accent",
+                  command=self._clear_perk_cooldown_once).pack(side="left", padx=(0, PAD_LG))
+        self.auto_clear_var = tk.BooleanVar(value=False)
+        ui.checkbutton(perk_frame, "Auto-Clear every", variable=self.auto_clear_var,
+                        command=self._on_auto_clear_toggle).pack(side="left")
+        self.auto_clear_interval_var = tk.StringVar(value="3")
+        ui.entry(perk_frame, textvariable=self.auto_clear_interval_var, width=4).pack(
+            side="left", padx=(PAD_SM - 2, 2))
+        ui.label(perk_frame, text="sec").pack(side="left")
+        self.auto_clear_status_lbl = ui.label(self, text="", muted=True)
+        self.auto_clear_status_lbl.pack(anchor="w", padx=PAD, pady=(0, PAD_SM))
+
+        self._refresh_current()
+
+    def _clear_perk_cooldown_once(self):
+        self.app.status("Clearing perk/gadget cooldown...")
+
+        def work():
+            return api.disable_perk_cooldown()
+
+        def done(_result):
+            self.app.status("Perk/gadget cooldown cleared")
+
+        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+
+    def _on_auto_clear_toggle(self):
+        if self.auto_clear_var.get():
+            self.auto_clear_status_lbl.configure(text="Auto-Clear running...")
+            self._auto_clear_tick()
+        else:
+            self.auto_clear_status_lbl.configure(text="Auto-Clear stopped")
+
+    def _auto_clear_tick(self):
+        if not self.auto_clear_var.get():
+            return
+
+        def work():
+            return api.disable_perk_cooldown()
+
+        def done(_result):
+            self.auto_clear_status_lbl.configure(text="Auto-Clear running (last call OK)")
+
+        def err(e):
+            self.auto_clear_status_lbl.configure(text=f"Auto-Clear running (last call failed: {e})")
+
+        self.app.runner.run(work, done, err)
+
+        try:
+            interval_ms = max(1, int(float(self.auto_clear_interval_var.get()))) * 1000
+        except ValueError:
+            interval_ms = 3000
+        self.app.root.after(interval_ms, self._auto_clear_tick)
+
+    def _kill_self(self):
+        self.app.status("Killing self...")
+
+        def work():
+            return api.kill_self()
+
+        def done(_result):
+            self.app.status("Killed self")
+
+        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+
+    def _set_invincible(self):
+        self.app.status("Toggling invincibility...")
+
+        def work():
+            return api.set_invincible()
+
+        def done(_result):
+            self.app.status("Invincibility toggled (not independently confirmed which state it's now in)")
+
+        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+
+    def _set_infinite_ammo(self):
+        self.app.status("Toggling infinite ammo...")
+
+        def work():
+            return api.set_infinite_ammo()
+
+        def done(_result):
+            self.app.status("Infinite ammo toggled (not independently confirmed which state it's now in)")
+
+        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+
+    def _teleport_above(self):
+        self.app.status("Teleporting above...")
+
+        def work():
+            return api.teleport_above()
+
+        def done(_result):
+            self.app.status("Teleported above")
+
+        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+
+    def _set_speed(self, value):
+        run_cheat_snippet(self.app, f"pc.CheatManager:Slomo({value})",
+                           on_extra_done=lambda _r: self._refresh_current())
+
+    def _set_custom_speed(self):
+        try:
+            value = float(self.custom_var.get())
+        except ValueError:
+            messagebox.showwarning("Invalid value", "Enter a number, e.g. 0.5 or 2.0")
+            return
+        self._set_speed(value)
+
+    def _refresh_current(self):
+        def work():
+            return api.run_raw_lua(
+                "local ws=(FindAllOf('WorldSettings') or {})[1]\n"
+                "local td='?'; pcall(function() td=tostring(ws.TimeDilation) end)\n"
+                "return td"
+            )
+
+        def done(result):
+            self.current_lbl.configure(text=f"Current TimeDilation: {result.strip()}")
+
+        self.app.runner.run(work, done, lambda e: None)
+
+
