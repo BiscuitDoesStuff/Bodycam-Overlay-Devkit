@@ -690,9 +690,15 @@ return ok and 'OK' or ('ERR: ' .. tostring(err))
 
 
 def kill_self(timeout=15):
-    """CheatManager:CheatKillMyself() -- confirmed live: killed the local
-    character, game stayed stable and responsive afterward (normal match
-    death/respawn flow, not a crash)."""
+    """CheatManager:CheatKillMyself() -- the call itself succeeds with no
+    Lua error, but per the app maintainer's own later, more careful
+    real-gameplay testing, it does NOT actually kill the local character.
+    This directly contradicts an earlier, wrong claim in this docstring
+    ("confirmed live: killed the local character") that was based on an
+    indirect/insufficiently-verified observation, not a clean before/after
+    check -- corrected here rather than left standing. Calling this is
+    therefore currently indistinguishable from a no-op as far as any
+    observable in-game effect goes."""
     _cheat("CheatKillMyself", timeout)
 
 
@@ -732,18 +738,24 @@ def end_match(victory=True, timeout=15):
 
 
 def set_invincible(timeout=15):
-    """CheatManager:CheatSetInvincible() -- confirmed live the call succeeds
-    with no error; the actual gameplay effect (does it prevent damage) was
-    not independently confirmed by taking damage afterward. Named like a
-    toggle, but that's not verified either -- calling it twice might not
-    turn it back off."""
+    """CheatManager:CheatSetInvincible() -- the call succeeds with no Lua
+    error, but confirmed by the app maintainer's real-gameplay testing to
+    have NO actual effect -- taking damage afterward was not prevented.
+    Kept here (not removed) since it's still a harmless, error-free call,
+    but do not expect it to do anything. `UCheatManager:God()` (the plain
+    Unreal Engine base-class cheat, not Bodycam-specific) was tried as an
+    alternative and also succeeds with no error; whether it actually
+    grants invincibility where this one doesn't has not yet been
+    independently confirmed either."""
     _cheat("CheatSetInvincible", timeout)
 
 
 def set_infinite_ammo(timeout=15):
-    """CheatManager:CheatInfiniteAmmo() -- confirmed live the call succeeds;
-    same "effect not independently re-verified, toggle behavior assumed
-    from the name only" caveat as set_invincible()."""
+    """CheatManager:CheatInfiniteAmmo() -- the call succeeds with no Lua
+    error, but confirmed by the app maintainer's real-gameplay testing to
+    have NO actual effect -- ammo was not observed to be infinite
+    afterward. Kept here (not removed) since it's still a harmless,
+    error-free call, but do not expect it to do anything."""
     _cheat("CheatInfiniteAmmo", timeout)
 
 
@@ -752,6 +764,40 @@ def teleport_above(timeout=15):
     succeeds; the name is unambiguous but the actual teleport wasn't
     independently confirmed by checking the pawn's location before/after."""
     _cheat("CheatTeleportAbove", timeout)
+
+
+def disable_perk_cooldown(timeout=15):
+    """PlayerController Server RPC `Server - CheatDisablePerkCooldown` --
+    NOT a plain CheatManager function, a real Server RPC (confirmed live
+    2026-09-08 as a genuine non-hosting client, LocalRole=2, in a real
+    10-player match). Confirmed by the app maintainer's own direct in-game
+    observation to genuinely clear an in-progress perk/gadget cooldown
+    (equipped: the FPV drone, 90s base cooldown -- became redeployable
+    immediately after this call).
+
+    A numeric check via PlayerState:GetRemainingGadgetCooldown() before/
+    after is NOT a reliable way to verify this call's effect -- repeated
+    live tests showed that value just ticking down by ordinary elapsed
+    time regardless of this call, which looked like "no effect" but was
+    contradicted by direct observation of the actual gadget becoming
+    usable again. See knowledge_base/CAPABILITIES.md for the full
+    correction. Trust the real in-game result over that specific readback.
+
+    IMPORTANT: this is NOT a persistent "cooldowns off forever" toggle --
+    confirmed it has to be called again for each new cooldown instance
+    (e.g. every time the gadget is redeployed and a fresh cooldown starts),
+    not just once at the start of a session. `overlay_app.py`'s SpeedTab has
+    an "Auto-Clear" checkbox that periodically re-calls this on a timer to
+    work around exactly that limitation, since manually re-clicking after
+    every single redeploy isn't practical."""
+    lua = r"""
+local pc = UEHelpers.GetPlayerController()
+local ok, err = pcall(function() pc['Server - CheatDisablePerkCooldown'](pc) end)
+return ok and 'OK' or ('ERR: ' .. tostring(err))
+"""
+    result = bc.run_lua(lua, timeout=timeout).strip()
+    if result != "OK":
+        raise RuntimeError(result)
 
 
 def get_adversary_info(timeout=15):
