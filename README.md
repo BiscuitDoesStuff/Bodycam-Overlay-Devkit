@@ -16,10 +16,7 @@ preserved as the license requires.
 ```
 README.md              You're reading it
 CLAUDE.md               Shared context for AI sessions working on this repo --
-                        project scope, architecture, confirmed-working vs.
-                        confirmed-NOT-working capabilities, known crash
-                        classes, UE4SS/Lua gotchas. Read this first if you're
-                        picking up this codebase cold, human or AI.
+                        project scope, architecture, and repo conventions.
 LICENSE                 MIT license for this app's own code
 requirements.txt        Python dependencies
 build.bat               Packages src/ into dist/BodycamOverlay.exe
@@ -27,11 +24,6 @@ BodycamOverlay.spec     PyInstaller spec for the same build, if you run it direc
 
 docs/
   DOCUMENTATION.md      Console/Shell/Plugins reference, troubleshooting, internals
-
-knowledge_base/
-  CAPABILITIES.md       What's actually in the game (DataTables, reflection surface)
-                        and a running list of what's confirmed safe vs. confirmed to
-                        crash -- see its own README.md for the harvester scripts
 
 community/
   buttons/              Shared Saved Command Buttons exports (.json)
@@ -44,7 +36,6 @@ src/
   tab_loadout.py          Loadout Editor tab (Currency & Unlocks included)
   tab_speed.py            Game Speed tab (Slomo, Player Cheats, Perk Cooldown)
   tab_saved_buttons.py    Saved Command Buttons tab
-  tab_testing.py          Testing tab
   tab_console.py          Console tab
   tab_plugins.py          Plugins tab
   tab_shell.py            Shell tab
@@ -110,8 +101,7 @@ after installing the mod.
 - Pick any map from a filterable, categorized tree — Playlist Maps,
   Dev/Unreleased (dev inventory room, empty loadout map, MoonTown, drone
   racetracks, etc.), and Unconfirmed (a map whose live package path is a
-  best-guess, not yet confirmed to actually load — see
-  `knowledge_base/CAPABILITIES.md`).
+  best-guess, not yet confirmed to actually load).
 - Pick a gamemode from a similarly categorized tree: Working, Untested,
   No Content (a real class/asset reference exists but there's no actual
   playable content behind it — e.g. Zombie/Pit/OnlyPistol/Training), and
@@ -160,7 +150,7 @@ after installing the mod.
   re-run one after every restart if you want it again. **Unlock All Items**
   sprays every id
   1-3250 into that list in one shot -- there's no safe way to read the
-  game's actual catalog id list (see `knowledge_base/CAPABILITIES.md`), so
+  game's actual catalog id list, so
   this covers a plausible range instead of a precise one; ids that don't
   match a real item are harmless. **Unlock Guns & Attachments** does the
   same thing but only sprays 1-999 -- a best-effort guess at where
@@ -188,8 +178,8 @@ does — self-only, so these don't ask for confirmation the way Host tab's
 match-wide actions do. **Kill Self / Invincible / Infinite Ammo are
 confirmed, via real-gameplay testing, to have no actual effect** despite
 calling with no error — left in the UI as harmless no-ops rather than
-removed; see `knowledge_base/CAPABILITIES.md` for the full story (including
-why "the call didn't error" isn't proof of anything). **Perk / Gadget
+removed (a good reminder that "the call didn't error" isn't proof of
+anything). **Perk / Gadget
 Cooldown**, below that, is a genuinely working feature: **Clear Cooldown
 Now** clears whatever gadget cooldown (e.g. the FPV drone's) is currently
 running, and **Auto-Clear** repeats that on a timer, since the effect only
@@ -204,17 +194,6 @@ run this way is always turned ON). Supports per-button delete and
 recategorize, and **Import** / **Export All** / **Export Selected** (via a
 checkbox next to each button) using JSON files, so you can share a set of
 commands with someone else — categories survive import/export.
-
-**Testing tab** — a research scratchpad: one-click buttons for functions
-found via SDK-dump digging, before deciding whether any are worth
-promoting into a real tab. Where a cheap readable value exists (own
-health/team, a team's score, whether the match has started), a button
-reads it before and after the call and reports whether it actually
-changed, not just whether the call errored — see `CLAUDE.md`'s
-"Confirmed NOT working" section for exactly why that distinction matters.
-Some rows need an actual hosted match, and the GameMode-touching ones are
-host-only (they safely skip, rather than crash, if you're a non-hosting
-client) — both are labeled accordingly.
 
 **Console tab** — a raw Lua console into the live game process, with saved
 history and a "Save as Button..." action. See
@@ -293,8 +272,7 @@ does the same build if you'd rather invoke PyInstaller directly.
   combo to stop engaging at all (the level and gamemode both just stayed
   put). Not fully root-caused; the practical takeaway is to space out
   Load Custom Match / Cycle attempts rather than firing several back to
-  back, and a game restart reliably clears it. See
-  `knowledge_base/CAPABILITIES.md` for the full incident notes.
+  back, and a game restart reliably clears it.
 - **Zombie, Pit, OnlyPistol, and Training are not real hostable modes** in
   the current build — their gamemode classes exist and are listed (under
   "NO CONTENT" in the Gamemode picker) but there's no actual playable

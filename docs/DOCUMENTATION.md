@@ -8,12 +8,8 @@ the old separate `CONSOLE_AND_SHELL.txt`, `PLUGINS.txt`, and
 `TROUBLESHOOTING.md` — everything they covered is here, under one table of
 contents, so there's one place to search instead of three.
 
-For what's actually *in* the game itself (every DataTable and its rows, the
-pawn/GameMode reflection surface, and a running list of what's confirmed
-safe vs. confirmed to crash) see
-**[knowledge_base/CAPABILITIES.md](../knowledge_base/CAPABILITIES.md)**
-instead — this file is about how the overlay app works, that one is about
-what the game will and won't let you do to it.
+This file is about how the overlay app itself works -- its Console/Shell/
+Plugins tabs, troubleshooting, and internals.
 
 ## Contents
 
@@ -378,8 +374,7 @@ game's own travel system can end up in a state where it stops honoring new
 `servertravel` calls at all, even for a map/mode combination that worked
 moments earlier. There's no in-app fix for this yet; **fully restart
 Bodycam** and space out subsequent attempts rather than repeating them
-quickly. See `knowledge_base/CAPABILITIES.md` for the live incident this
-was found from.
+quickly.
 
 If instead nothing happens because a confirmation dialog appeared and was
 missed — Load Custom Match / Cycle / Force Round End all ask first when the
@@ -424,8 +419,7 @@ Safety properties, all load-bearing (not decorative):
   touched-invalid-UObject can still crash the real game process. There is
   no sandbox.
 - **`bridge_client._send()` serializes concurrent Python-side callers with a
-  `threading.Lock()`** — added after a real race (2026-09-07, see
-  `knowledge_base/CAPABILITIES.md`): two `AsyncRunner` threads (e.g. two
+  `threading.Lock()`** — added after a real, reproduced race: two `AsyncRunner` threads (e.g. two
   "Refresh ..." buttons clicked close together, or a tab's own init
   auto-refresh overlapping a manual one) writing `req.tmp` at the same
   moment could throw a `PermissionError`, or worse, silently clobber each
@@ -589,8 +583,7 @@ stable for years.
   `IsChildOf`/`GetSuperClass` on the resulting class object to verify it's
   really a `GameModeBase` subclass, because calling either of those on a
   `StaticFindObject`-obtained class reference hung the bridge and crashed
-  the game during this feature's own development (see
-  `knowledge_base/CAPABILITIES.md`'s crash list). A plain non-nil check is
+  the game during this feature's own development. A plain non-nil check is
   as far as this is pushed. `add_gamemode` defaults new finds to
   `status: "untested"` — see `gamemodes.json`'s own comment for the full
   `working` / `untested` / `no_content` / `broken` taxonomy, and why
@@ -617,8 +610,7 @@ stable for years.
   Lua error — this corrects an earlier wrong claim that `CheatKillMyself`
   had been confirmed to kill the local character (it hadn't been verified
   carefully enough). All three are left shipped as harmless no-ops rather
-  than removed; see `knowledge_base/CAPABILITIES.md` for the full
-  correction. `teleport_above`/`end_match` remain at the weaker "call
+  than removed. `teleport_above`/`end_match` remain at the weaker "call
   succeeded, no error" confirmation level — not re-tested and found broken
   like the other three, just never carefully re-verified either way. Also
   discovered here: a `UFunction` with **multiple** out-parameters
@@ -646,10 +638,10 @@ stable for years.
   either read a struct back or passed through a live `FindAllOf`-obtained
   reference untouched). Confirmed live: even round-tripping your own
   just-read, completely unmodified `FSTR_PCInfo` straight into
-  `AssignTeam(t, 1)` crashed the game outright. See
-  `knowledge_base/CAPABILITIES.md`'s crash list for the full incident and
-  candidate root causes — do not retry either function without a real
-  second connected player and a fresh game restart first.
+  `AssignTeam(t, 1)` crashed the game outright, reproducibly, including
+  once with a real second connected player -- do not retry either
+  function without solving the underlying struct-argument packing
+  problem first.
 - **`get_currency`/`set_currency`/`is_item_unlocked`/`unlock_item(s)`/
   `lock_item`/`unlock_all_items`/`unlock_weapons_and_attachments`**: unlike
   everything else in this section,
@@ -658,8 +650,7 @@ stable for years.
   reached via `UEHelpers.GetGameInstance()`): `ActualReissadPointsScore`/
   `MaxAllowedReissadPoints` for currency, `PlayerInventoryItems` (a
   `TSet<int32>`) for item ownership. Two more targeted approaches were tried
-  first and explicitly rejected — see `knowledge_base/CAPABILITIES.md`'s
-  "Currency and item-ownership investigation" section for the full trail:
+  first and explicitly rejected:
   `CheatManager:CheatGetReissadPoint(N)` runs with no error but doesn't
   actually move the balance, and `CheatManager:PurchaseInventoryItemWithSoftCurrency`/
   `GiveInventoryItem` are real and callable (once
@@ -693,9 +684,8 @@ stable for years.
   above 1000), not from a read category field. Treat the 999 cutoff as a
   guess worth revisiting, not a verified boundary.
 - **Lua/UE4SS calling-convention gotchas worth knowing before adding more
-  functions to this file** (all confirmed live 2026-09-08 during a full
-  pass over the SDK header dump — see `knowledge_base/CAPABILITIES.md`'s
-  "SDK full reflection pass" section for the full trail):
+  functions to this file** (all confirmed live against a full pass over
+  the SDK header dump):
   - A UFUNCTION that looks plain in the header dump but has a matching
     `X__DelegateSignature` entry next to it is actually a **multicast
     delegate property** — calling it directly fails with `"attempt to call
@@ -747,7 +737,7 @@ stable for years.
 What was originally one large `overlay_app.py` is now split into
 `overlay_app.py` (the `App` class, tray icon, single-instance lock, and
 the `__main__` entry point) plus one `tab_*.py` module per tab
-(`tab_host.py`, `tab_loadout.py`, `tab_speed.py`, `tab_testing.py`,
+(`tab_host.py`, `tab_loadout.py`, `tab_speed.py`,
 `tab_console.py`, `tab_saved_buttons.py`, `tab_plugins.py`, `tab_shell.py`,
 `tab_about.py`) and `ui_common.py` for the dialogs/mixins/helpers shared
 across two or more of them (`AsyncRunner`, `PickerDialog`,
