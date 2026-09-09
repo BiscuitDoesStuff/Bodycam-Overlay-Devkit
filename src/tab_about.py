@@ -33,10 +33,9 @@ class AboutTab(ttk.Frame):
                              "Builds on clutch5.9's original with its own changes: the current "
                              "red/black/white theme, categorized Saved Command Buttons with "
                              "per-category Run All, the Host/Create Match tab's weather/cheat"
-                             "-manager Match Control section and \"someone else is here\" safety "
-                             "guard, and the live-tested capability notes in "
-                             "knowledge_base/CAPABILITIES.md. Distributed under the same MIT "
-                             "License as the original -- see LICENSE for what it covers and "
+                             "-manager Match Control section, Currency & Unlocks, and "
+                             "\"someone else is here\" safety guard. Distributed under the same "
+                             "MIT License as the original -- see LICENSE for what it covers and "
                              "what's bundled/licensed separately.",
                  muted=True, wraplength=600, justify="left").pack(anchor="w", padx=PAD_LG, pady=(0, PAD_LG))
 
@@ -46,9 +45,7 @@ class AboutTab(ttk.Frame):
                  muted=True, justify="left").pack(anchor="w", padx=PAD_LG, pady=(0, PAD_LG))
 
         ui.label(self, text="Docs: docs/DOCUMENTATION.md in the project folder explains the Console/"
-                             "Shell tabs, the plugin format, and troubleshooting. "
-                             "knowledge_base/CAPABILITIES.md covers what's actually in the game -- "
-                             "content tables and what's confirmed safe vs. confirmed to crash.",
+                             "Shell tabs, the plugin format, and troubleshooting.",
                  muted=True, wraplength=600, justify="left").pack(anchor="w", padx=PAD_LG)
 
 

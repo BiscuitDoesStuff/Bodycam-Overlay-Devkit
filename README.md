@@ -47,7 +47,6 @@ src/
   gvas2.py               Loadout.sav binary format reader/writer
   shell_client.py        Runs Shell tab scripts via Git Bash
   install_bridge.py      Finds the game, deploys UE4SS + ClaudeBridge
-  smoke_test.py          Manual smoke test against a running game
   app_icon.ico           App / exe icon
   families.json, maps.json, gamemodes.json    Hand-curated config (see below)
   mod/ClaudeBridge/       The UE4SS Lua mod this whole app talks to

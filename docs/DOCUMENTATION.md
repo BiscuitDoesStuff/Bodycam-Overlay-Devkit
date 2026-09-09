@@ -602,25 +602,18 @@ stable for years.
   `set_infinite_ammo`/`teleport_above`**: all thin wrappers around the
   game's own developer `CheatManager` (`BP_BodycamCheatManager`, reached via
   `pc.CheatManager` — the same object `SpeedTab`'s Slomo control already
-  used before any of this file's other additions). `CheatEndRound` (paired
-  with `CheatSetGameTimer(1.0)`) was confirmed to have a real, observed
-  effect on `get_live_state()`. **`kill_self`/`set_invincible`/
-  `set_infinite_ammo` were later confirmed, via careful real-gameplay
-  testing, to have NO actual effect** despite calling successfully with no
-  Lua error — this corrects an earlier wrong claim that `CheatKillMyself`
-  had been confirmed to kill the local character (it hadn't been verified
-  carefully enough). All three are left shipped as harmless no-ops rather
-  than removed. `teleport_above`/`end_match` remain at the weaker "call
-  succeeded, no error" confirmation level — not re-tested and found broken
-  like the other three, just never carefully re-verified either way. Also
-  discovered here: a `UFunction` with **multiple** out-parameters
-  (`GetScoreToWin(int32&, int32&)`) flattens all of them into the *first*
-  table argument passed, not one table per parameter.
+  used). `CheatEndRound` (paired with `CheatSetGameTimer(1.0)`) has a real,
+  observed effect on `get_live_state()`. **`kill_self`/`set_invincible`/
+  `set_infinite_ammo` call cleanly but have NO actual effect** — left
+  shipped as harmless no-ops rather than removed. `teleport_above`/
+  `end_match` are callable but their real effect hasn't been independently
+  re-verified either way. Also: a `UFunction` with **multiple**
+  out-parameters (`GetScoreToWin(int32&, int32&)`) flattens all of them
+  into the *first* table argument passed, not one table per parameter.
 - **`disable_perk_cooldown`**: unlike everything else in this section, this
   calls a real Server RPC (`pc['Server - CheatDisablePerkCooldown'](pc)`,
-  bracket-syntax because of the literal space in the UFunction's name — see
-  §5.6/CLAUDE.md's calling-convention notes), not a plain `CheatManager`
-  function. Confirmed live, by direct in-game observation, to genuinely
+  bracket-syntax because of the literal space in the UFunction's name), not
+  a plain `CheatManager` function. Confirmed live, by direct in-game observation, to genuinely
   clear an in-progress gadget cooldown — but it is NOT a persistent
   toggle, it only clears whatever cooldown is running *right now*, so it
   has to be re-applied for every new cooldown instance. `SpeedTab`'s
@@ -631,17 +624,6 @@ stable for years.
   NOT a reliable way to verify it — that value just ticks down with real
   elapsed time regardless of this call, which looked like "no effect"
   until directly contradicted by watching the actual gadget in-game.
-- **`AssignTeam`/`KickPlayer` are NOT implemented** — both need a freshly
-  *constructed* nested struct as an input argument (`FSTR_KickVote`
-  wrapping `FSTR_PCInfo`, GUID-mangled field names), categorically
-  different from every pattern confirmed safe elsewhere in this file (which
-  either read a struct back or passed through a live `FindAllOf`-obtained
-  reference untouched). Confirmed live: even round-tripping your own
-  just-read, completely unmodified `FSTR_PCInfo` straight into
-  `AssignTeam(t, 1)` crashed the game outright, reproducibly, including
-  once with a real second connected player -- do not retry either
-  function without solving the underlying struct-argument packing
-  problem first.
 - **`get_currency`/`set_currency`/`is_item_unlocked`/`unlock_item(s)`/
   `lock_item`/`unlock_all_items`/`unlock_weapons_and_attachments`**: unlike
   everything else in this section,
@@ -649,15 +631,8 @@ stable for years.
   properties directly on the live GameInstance (`GI_BodycamSteamBackend_C`,
   reached via `UEHelpers.GetGameInstance()`): `ActualReissadPointsScore`/
   `MaxAllowedReissadPoints` for currency, `PlayerInventoryItems` (a
-  `TSet<int32>`) for item ownership. Two more targeted approaches were tried
-  first and explicitly rejected:
-  `CheatManager:CheatGetReissadPoint(N)` runs with no error but doesn't
-  actually move the balance, and `CheatManager:PurchaseInventoryItemWithSoftCurrency`/
-  `GiveInventoryItem` are real and callable (once
-  `ValidatePurchaseInventoryItemWithSoftCurrency()` is called first to clear
-  an initial nullptr guard error) but produced no observable effect in
-  testing, most likely because this build talks to a mock/offline Steam
-  inventory layer. `unlock_all_items()` sprays every integer 1–3250 into
+  `TSet<int32>`) for item ownership. No `CheatManager`/purchase call is
+  involved. `unlock_all_items()` sprays every integer 1–3250 into
   `PlayerInventoryItems` rather than a precise catalog id list, because
   reading real ids from `DT_NewShopItem` crashes the game by every method
   tried (`GetDataTableRowFromName`, `GetDataTableColumnAsString` — both via
@@ -683,55 +658,6 @@ stable for years.
   ids (2 weapon skins under 1000, a badge and an operator skin both at or
   above 1000), not from a read category field. Treat the 999 cutoff as a
   guess worth revisiting, not a verified boundary.
-- **Lua/UE4SS calling-convention gotchas worth knowing before adding more
-  functions to this file** (all confirmed live against a full pass over
-  the SDK header dump):
-  - A UFUNCTION that looks plain in the header dump but has a matching
-    `X__DelegateSignature` entry next to it is actually a **multicast
-    delegate property** — calling it directly fails with `"attempt to call
-    a MulticastDelegateProperty value"`. Call `:Broadcast(args...)` on the
-    property instead (confirmed for `PropagateXPReward`, `Midnight`,
-    `Instant Time of Day Change`).
-  - The header dump renders Blueprint class names with a fake `A`/`U`
-    type-prefix (`AGT_Bodycam_C`, `AUltra_Dynamic_Sky_C`) that `FindAllOf`
-    will not accept — it needs the un-prefixed name (`GT_Bodycam_C`,
-    `Ultra_Dynamic_Sky_C`). Passing the prefixed name doesn't error, it
-    just silently returns `nil`, which looks identical to "zero live
-    instances" and is easy to misdiagnose as a class not being loaded yet.
-  - `UEHelpers.GetGameStateChecked()`/`GetGameModeChecked()` don't exist in
-    this UE4SS build. Use `pc:GetWorld().GameState` /
-    `pc:GetWorld().AuthorityGameMode` instead — plain properties on the
-    `UWorld` from `pc:GetWorld()`. **`AuthorityGameMode` specifically
-    crashed the game** (confirmed live 2026-09-08, root-caused from a real
-    crash dump) when dereferenced (`:GetClass()`) as a non-hosting client —
-    it does NOT come back as Lua `nil` there (a plain `if not gm` check
-    does not catch it), it's just not a real usable object. Always check
-    `pc:GetLocalRole() == 3` (`ROLE_Authority`) before touching
-    `AuthorityGameMode` at all. `(FindAllOf('GameModeBase') or {})[1]` (the
-    pattern `get_match_info()` already uses) does not have this problem —
-    prefer it when a nil-safe "is there a GameMode at all" check is all you
-    need.
-  - A UFUNCTION whose display name contains a space (`"Set Achievement"`,
-    `"Instant Time of Day Change"`) can't use `:Name()` colon syntax —
-    index it with brackets and pass `self` explicitly instead:
-    `obj['Set Achievement'](obj, 'Name')`.
-  - A `UBlueprintFunctionLibrary` function with no natural instance to call
-    it on is reachable via its Class Default Object:
-    `StaticFindObject('/Script/Bodycam.Default__SomeLibrary')`, then call
-    the method on that directly — confirmed safe, distinct from the
-    `IsChildOf`/`GetSuperClass`-on-a-raw-UClass crash class documented
-    above (a CDO is a normal instance, not a bare class reference).
-  - `"attempt to call a TrivialObject value"` means UE4SS found the named
-    interface function but the concrete class never overrides it — it only
-    inherits the interface's empty default body. Safe, not a crash; treat
-    it as "this class doesn't actually implement this," not as a bug to
-    work around.
-  - GameMode, GameState, and level-scoped environment actors
-    (`Ultra_Dynamic_Sky_C`) only exist while actually hosting/in a real
-    match — none of them are instantiated while sitting in the Lobby/menu,
-    which is easy to mistake for "these functions aren't reachable" when
-    the real issue is "there's nothing to call them on yet."
-
 ### 5.6 The UI layer — a few non-obvious mechanisms
 
 What was originally one large `overlay_app.py` is now split into

@@ -422,8 +422,8 @@ def get_match_info(timeout=15):
 
     IMPORTANT correction (2026-09-07, later same day): GetLobbyAccessMethod/
     IsHostMigrating/GetServerSteamID are declared on AGM_Bodycam_C (the Lobby
-    gamemode class specifically, confirmed via the UE4SS-generated C++ SDK --
-    see knowledge_base/sdk_headers/GM_Bodycam.hpp) and do NOT exist on a
+    gamemode class specifically, confirmed via the UE4SS-generated C++ SDK)
+    and do NOT exist on a
     per-match gamemode instance -- confirmed live: once actually in a
     Deathmatch match (GM_Deathmatch_C active), all three correctly degrade to
     'n/a' via this function's own pcall guard rather than erroring, but that
@@ -432,10 +432,10 @@ def get_match_info(timeout=15):
     hierarchy. HasMatchStarted/HasMatchEnded are apparently on a shared base
     class and keep working in both places.
 
-    Also added (2026-09-07): my_team/my_kills/my_deaths/my_score/my_rank via
+    Also: my_team/my_kills/my_deaths/my_score/my_rank via
     GetPcInfo, also Lobby-only for the same reason. Confirmed live: the
-    struct's mangled field names match knowledge_base/sdk_headers/
-    STR_PCInfo.hpp exactly, and reading a nested struct (Stats) this way
+    struct's mangled field names match the real UE4SS-generated SDK exactly,
+    and reading a nested struct (Stats) this way
     works fine -- the "structs aren't readable" reflection ceiling
     documented elsewhere applies to props()-style property reads, not to an
     explicit out-param call like this one. Deliberately does NOT read the
@@ -468,15 +468,14 @@ out[#out+1] = 'host_migrating=' .. safe_out(function(t) gm:IsHostMigrating(t) en
 out[#out+1] = 'server_steam_id=' .. safe_out(function(t) gm:GetServerSteamID(t) end, 'SteamID', true)
 
 -- GetPcInfo (Lobby-only, like the three above) hands back the local player's
--- own FSTR_PCInfo -- a Blueprint struct with GUID-mangled field names (see
--- knowledge_base/sdk_headers/STR_PCInfo.hpp). Matched by name PREFIX, not
+-- own FSTR_PCInfo -- a Blueprint struct with GUID-mangled field names.
+-- Matched by name PREFIX, not
 -- the full mangled name, since only the prefix is stable across a Blueprint
 -- recompile. Deliberately only reads plain ints/strings -- the PC/Character/
 -- SkinInfo/BadgeInfo fields are UObject pointers or DataTableRowHandles that
 -- are NEVER touched beyond this, because calling further reflection methods
 -- (GetFName, equality, etc.) on a UObject pulled out of a struct this way
--- crashed the game during this feature's own development -- see
--- knowledge_base/CAPABILITIES.md's crash list. KillInfo (a nested array
+-- crashed the game during this feature's own development. KillInfo (a nested array
 -- inside Stats) is skipped for the same reason plus its numeric keys.
 local pcOk, pcErr = pcall(function()
     local t = {}
@@ -560,8 +559,8 @@ def get_lobby_roster(timeout=15):
     field extraction reuses get_match_info()'s exact safe-field allowlist
     (Team, Stats.Kill/Death/Score/RankName by name PREFIX) and the exact same
     exclusions (never PC/Character/SteamID/SkinInfo/BadgeInfo, never
-    KillInfo) for the same reasons -- see that function's docstring and
-    knowledge_base/CAPABILITIES.md's crash list. Re-verify this docstring
+    KillInfo) for the same reasons -- see that function's docstring.
+    Re-verify this docstring
     against reality the first time it actually runs with 2+ connected
     players, and correct the flattening assumption above if the real shape
     turns out to be different."""
@@ -780,8 +779,7 @@ def disable_perk_cooldown(timeout=15):
     live tests showed that value just ticking down by ordinary elapsed
     time regardless of this call, which looked like "no effect" but was
     contradicted by direct observation of the actual gadget becoming
-    usable again. See knowledge_base/CAPABILITIES.md for the full
-    correction. Trust the real in-game result over that specific readback.
+    usable again. Trust the real in-game result over that specific readback.
 
     IMPORTANT: this is NOT a persistent "cooldowns off forever" toggle --
     confirmed it has to be called again for each new cooldown instance
@@ -817,8 +815,7 @@ def get_adversary_info(timeout=15):
     exact kind of struct (a real other-player FSTR_PCInfo, unmodified)
     straight into AssignTeam crashed the game outright, confirmed live,
     twice (once with a self struct, once with a real second player's
-    struct obtained via this same function). See
-    knowledge_base/CAPABILITIES.md's crash list -- AssignTeam/KickPlayer
+    struct obtained via this same function). AssignTeam/KickPlayer
     are not implemented anywhere in this file for this reason. Reading
     values out of the struct this function returns is fine; feeding that
     struct into a UFunction argument is not.
@@ -937,9 +934,9 @@ def add_gamemode(name, class_path, team_based=False, default_cap=8, default_team
 
     `status` is one of 'working' / 'untested' / 'broken' -- a freshly
     discovered class defaults to 'untested' since finding the class path
-    proves nothing about whether it's actually hostable (see
-    knowledge_base/CAPABILITIES.md's Training/GM_Training_C entry for exactly
-    that gap). The Host tab groups its gamemode list by this field and shows
+    proves nothing about whether it's actually hostable (Training/
+    GM_Training_C is a real example of exactly that gap -- see
+    gamemodes.json's own entry for it). The Host tab groups its gamemode list by this field and shows
     `note` for whichever entry is selected, so a mode is never silently
     presented as equivalent to the confirmed-working ones."""
     path = os.path.join(_CONFIG_DIR, "gamemodes.json")
@@ -1342,19 +1339,8 @@ return 'SelectNewCurrentLoadout({loadout_idx}) ok=' .. tostring(ok)
 
 # --------------------------------------------------------------------------- currency / item unlocks (live GameInstance)
 #
-# Both confirmed live 2026-09-07 -- see knowledge_base/CAPABILITIES.md's
-# "Currency and item-ownership investigation" section for the full trail,
-# including two dead ends that are NOT used here:
-#   - CheatManager:CheatGetReissadPoint(N) runs with no error but does not
-#     actually change the balance -- confirmed by reading it before/after.
-#   - CheatManager:PurchaseInventoryItemWithSoftCurrency(id) / GiveInventoryItem(id)
-#     are real, callable, and don't crash, but produced no observable effect
-#     in three tries even after clearing their initial nullptr guard error --
-#     this build most likely runs against a mock/offline Steam inventory
-#     layer (BodycamSteamMock.hpp exists in the SDK dump) that these silently
-#     no-op against. Not used for this reason, not because they're unsafe.
-#
-# What IS used: both currency and item ownership are plain properties on the
+# Both confirmed live. No CheatManager function is involved -- both currency
+# and item ownership are plain properties on the
 # live GameInstance (class GI_BodycamSteamBackend_C) -- a direct property
 # write / TSet mutation, the same low-risk category as every other live
 # UObject property this app already writes (e.g. Loadout slot names,
