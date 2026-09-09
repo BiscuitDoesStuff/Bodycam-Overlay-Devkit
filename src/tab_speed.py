@@ -96,13 +96,10 @@ class SpeedTab(ttk.Frame):
         ttk.Separator(self, orient="horizontal").pack(fill="x", padx=PAD, pady=(PAD_LG, PAD_SM))
 
         # Perk/Gadget Cooldown -- unlike the four cheats above, this one is
-        # a real, confirmed-working Server RPC (found via the same SDK-dump
-        # digging, but this one actually does something -- see
-        # knowledge_base/CAPABILITIES.md's "Server - CheatDisablePerkCooldown
-        # DOES work" correction). It has to be re-applied for every new
-        # cooldown instance, not just once, so Auto-Clear exists to do that
-        # on a timer instead of needing a manual re-click after every
-        # gadget redeploy.
+        # a real, confirmed-working Server RPC that actually does something.
+        # It has to be re-applied for every new cooldown instance, not just
+        # once, so Auto-Clear exists to do that on a timer instead of
+        # needing a manual re-click after every gadget redeploy.
         ui.label(self, text="Perk / Gadget Cooldown", header=True).pack(anchor="w", padx=PAD, pady=(0, PAD_SM))
         ui.info_banner(
             self, title="Confirmed working -- must be reapplied per cooldown instance",

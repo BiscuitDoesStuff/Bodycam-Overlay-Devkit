@@ -18,8 +18,8 @@ _SEQ = os.path.join(_DIR, "seq.txt")
 # req.txt/resp.txt are a single slot, not a queue -- ClaudeBridge itself only
 # ever tracks one in-flight request (see docs/DOCUMENTATION.md §5.1's "busy"
 # flag). Two Python-side calls racing on _send() at the same time doesn't
-# just risk a PermissionError on the shared _TMP path (observed live,
-# 2026-09-07 -- see knowledge_base/CAPABILITIES.md) -- the *second* os.replace
+# just risk a PermissionError on the shared _TMP path (observed live) --
+# the *second* os.replace
 # can silently clobber the first thread's request before the game ever reads
 # it, leaving that thread waiting on a response that will never come until it
 # times out. AsyncRunner spawns a new thread per call, so this is reachable

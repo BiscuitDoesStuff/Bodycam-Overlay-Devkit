@@ -55,7 +55,7 @@ class LoadoutTab(ttk.Frame):
                  "\"Unlock All Items\" sprays "
                  "every id in a plausible "
                  "range rather than a precise catalog list (there's no safe way to read "
-                 "the real one -- see knowledge_base/CAPABILITIES.md); ids that don't "
+                 "the real one); ids that don't "
                  "correspond to a real item are harmless.",
         ).pack(fill="x", padx=PAD, pady=(PAD, 0))
 
@@ -316,7 +316,7 @@ class LoadoutTab(ttk.Frame):
                 "This sprays item ids 1-999 only, instead of the full 1-3250 range "
                 "\"Unlock All Items\" covers. This is a BEST-EFFORT guess, not a "
                 "precise weapons-only filter -- there's no safe way to read an "
-                "item's real category (see knowledge_base/CAPABILITIES.md). The cutoff "
+                "item's real category. The cutoff "
                 "is inferred from just 4 known ids: two real weapon skins (128, 281) "
                 "were both under 1000, two real non-weapon items (a badge and an "
                 "operator skin) were both 1000+. It will likely also unlock some "
