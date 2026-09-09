@@ -1413,6 +1413,14 @@ class SpeedTab(ttk.Frame):
         # teleport_above docstrings for exactly what was independently
         # confirmed live vs. just "the call didn't error."
         ui.label(self, text="Player Cheats", header=True).pack(anchor="w", padx=PAD, pady=(0, PAD_SM))
+        ui.info_banner(
+            self, title="Kill Self / Invincible / Infinite Ammo confirmed NOT working",
+            text="All three calls succeed with no error, but real-gameplay testing confirmed "
+                 "they have no actual effect -- self didn't die, damage wasn't prevented, ammo "
+                 "wasn't infinite. Left in the UI since they're harmless, not removed, but don't "
+                 "expect anything to happen. Teleport Above's real effect is still unconfirmed "
+                 "either way (not tested as carefully).",
+        ).pack(fill="x", padx=PAD, pady=(0, PAD_SM))
         cheat_frame = ui.frame(self)
         cheat_frame.pack(fill="x", padx=PAD, pady=(0, PAD_SM))
         ui.button(cheat_frame, "Kill Self", outline=True, command=self._kill_self).pack(
@@ -1423,7 +1431,79 @@ class SpeedTab(ttk.Frame):
             side="left", padx=(0, PAD_SM))
         ui.button(cheat_frame, "Teleport Above", command=self._teleport_above).pack(side="left")
 
+        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=PAD, pady=(PAD_LG, PAD_SM))
+
+        # Perk/Gadget Cooldown -- unlike the four cheats above, this one is
+        # a real, confirmed-working Server RPC (found via the same SDK-dump
+        # digging, but this one actually does something -- see
+        # knowledge_base/CAPABILITIES.md's "Server - CheatDisablePerkCooldown
+        # DOES work" correction). It has to be re-applied for every new
+        # cooldown instance, not just once, so Auto-Clear exists to do that
+        # on a timer instead of needing a manual re-click after every
+        # gadget redeploy.
+        ui.label(self, text="Perk / Gadget Cooldown", header=True).pack(anchor="w", padx=PAD, pady=(0, PAD_SM))
+        ui.info_banner(
+            self, title="Confirmed working -- must be reapplied per cooldown instance",
+            text="Server RPC, not a plain CheatManager call -- confirmed live to clear an "
+                 "in-progress gadget cooldown (tested against the FPV drone's 90s cooldown). "
+                 "NOT a one-time toggle: it only clears whatever cooldown is running right now, "
+                 "so it has to be called again every time a new cooldown starts (e.g. each "
+                 "redeploy). Use Auto-Clear below instead of manually re-clicking after every use.",
+        ).pack(fill="x", padx=PAD, pady=(0, PAD_SM))
+        perk_frame = ui.frame(self)
+        perk_frame.pack(fill="x", padx=PAD, pady=(0, PAD_SM))
+        ui.button(perk_frame, "Clear Cooldown Now", kind="accent",
+                  command=self._clear_perk_cooldown_once).pack(side="left", padx=(0, PAD_LG))
+        self.auto_clear_var = tk.BooleanVar(value=False)
+        ui.checkbutton(perk_frame, "Auto-Clear every", variable=self.auto_clear_var,
+                        command=self._on_auto_clear_toggle).pack(side="left")
+        self.auto_clear_interval_var = tk.StringVar(value="3")
+        ui.entry(perk_frame, textvariable=self.auto_clear_interval_var, width=4).pack(
+            side="left", padx=(PAD_SM - 2, 2))
+        ui.label(perk_frame, text="sec").pack(side="left")
+        self.auto_clear_status_lbl = ui.label(self, text="", muted=True)
+        self.auto_clear_status_lbl.pack(anchor="w", padx=PAD, pady=(0, PAD_SM))
+
         self._refresh_current()
+
+    def _clear_perk_cooldown_once(self):
+        self.app.status("Clearing perk/gadget cooldown...")
+
+        def work():
+            return api.disable_perk_cooldown()
+
+        def done(_result):
+            self.app.status("Perk/gadget cooldown cleared")
+
+        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+
+    def _on_auto_clear_toggle(self):
+        if self.auto_clear_var.get():
+            self.auto_clear_status_lbl.configure(text="Auto-Clear running...")
+            self._auto_clear_tick()
+        else:
+            self.auto_clear_status_lbl.configure(text="Auto-Clear stopped")
+
+    def _auto_clear_tick(self):
+        if not self.auto_clear_var.get():
+            return
+
+        def work():
+            return api.disable_perk_cooldown()
+
+        def done(_result):
+            self.auto_clear_status_lbl.configure(text="Auto-Clear running (last call OK)")
+
+        def err(e):
+            self.auto_clear_status_lbl.configure(text=f"Auto-Clear running (last call failed: {e})")
+
+        self.app.runner.run(work, done, err)
+
+        try:
+            interval_ms = max(1, int(float(self.auto_clear_interval_var.get()))) * 1000
+        except ValueError:
+            interval_ms = 3000
+        self.app.root.after(interval_ms, self._auto_clear_tick)
 
     def _kill_self(self):
         self.app.status("Killing self...")
@@ -1547,6 +1627,265 @@ class ConsoleShellMixin:
         if self.hist_idx < len(self.history):
             self.input_box.insert("1.0", self.history[self.hist_idx])
         return "break"
+
+
+class TestingTab(ConsoleShellMixin, ttk.Frame):
+    """Scratch space for trying out newly-discovered live functions (from
+    SDK-dump digging, keyword sweeps, etc.) with one click, before deciding
+    whether any of them are worth wrapping into game_api.py/a real tab.
+    Each button fires a small, pre-written Lua snippet and logs the raw
+    result below. Where a plausible readable value exists (own health,
+    own team, a team's score, whether the match has started), the button
+    reads it once BEFORE the call and once AFTER, and reports both plus
+    whether it actually changed -- "the call didn't error" alone was
+    exactly what led to a wrong "CheatKillMyself works" claim earlier this
+    project (see knowledge_base/CAPABILITIES.md's correction), so this tab
+    checks for a real value change wherever a cheap one is known instead of
+    just trusting a clean return. Tests with no known cheap readable value
+    still only report ok/err -- that's a real limitation, not a false
+    "nothing changed," so don't read a blank changed= as proof of failure.
+    Some snippets need an actual hosted match (GameMode/GameState/
+    environment actors don't exist in the bare Lobby -- see
+    CAPABILITIES.md's "GameMode/GameState/environment actors only exist
+    during an actual hosted match" note) -- labeled accordingly.
+
+    The "Server RPCs" category calls functions whose header-dump name
+    starts with "Server - " -- a real Remote Procedure Call, not a plain
+    local function. When YOU are the host (`pc:GetLocalRole() == 3`, i.e.
+    `ROLE_Authority` -- confirmed live 2026-09-08 while hosting with real
+    other players connected), calling one of these likely just executes
+    locally the same as any other function, since you already have
+    authority -- it does NOT exercise the actual "sent over the network to
+    the real host" path. That path only gets tested by running these while
+    YOU are a non-hosting client in someone else's match. Confirmed so far
+    (as host): `Server - Cheat_KillMyself` calls with no error but still
+    shows no health change, same as the plain `CheatKillMyself` -- not yet
+    tested as a guest."""
+
+    # Reusable "read one observable value" snippets, each returning a
+    # single plain string via tostring() -- used as both the before- and
+    # after-snapshot for tests where a real effect should show up here.
+    SNAPSHOT_HEALTH = (
+        "local pc=UEHelpers.GetPlayerController()\n"
+        "local pawn=pc.Pawn\n"
+        "if not pawn then return 'no pawn' end\n"
+        "local h={}\n"
+        "local ok=pcall(function() pawn:GetHealth(h) end)\n"
+        "if not ok then return 'GetHealth failed' end\n"
+        "return tostring(h.Health)"
+    )
+    SNAPSHOT_TEAM = (
+        "local pc=UEHelpers.GetPlayerController()\n"
+        "local pawn=pc.Pawn\n"
+        "if not pawn then return 'no pawn' end\n"
+        "local t={}\n"
+        "local ok=pcall(function() pawn:GetTeam(t) end)\n"
+        "if not ok then return 'GetTeam failed' end\n"
+        "return tostring(t.Team)"
+    )
+    SNAPSHOT_TEAM0_SCORE = (
+        "local pc=UEHelpers.GetPlayerController()\n"
+        "local gs=pc:GetWorld().GameState\n"
+        "if not gs then return 'no GameState' end\n"
+        "local t={}\n"
+        "local ok=pcall(function() gs:TeamScore(0,t) end)\n"
+        "if not ok then return 'TeamScore failed' end\n"
+        "return tostring(t.Score)"
+    )
+    SNAPSHOT_MATCH_STARTED = (
+        "local gm=(FindAllOf('GameModeBase') or {})[1]\n"
+        "if not gm then return 'no GameMode' end\n"
+        "local ok,v=pcall(function() return gm:HasMatchStarted() end)\n"
+        "if not ok then return 'HasMatchStarted failed' end\n"
+        "return tostring(v)"
+    )
+
+    # Each entry: (label, main_lua, snapshot_lua_or_None). main_lua should
+    # return a plain 'ok=...  err=...' (or similar) string on its own --
+    # the snapshot, when given, is run before AND after main_lua and shown
+    # alongside it, not folded into main_lua's own return.
+    TESTS = [
+        ("CheatManager -- self-effect, checked against health", [
+            ("God()", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local ok,err=pcall(function() pc.CheatManager:God() end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", SNAPSHOT_HEALTH),
+            ("CheatSetInvincible()", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local ok,err=pcall(function() pc.CheatManager:CheatSetInvincible() end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", SNAPSHOT_HEALTH),
+            ("CheatKillMyself()", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local ok,err=pcall(function() pc.CheatManager:CheatKillMyself() end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", SNAPSHOT_HEALTH),
+        ]),
+        ("Server RPCs -- real network calls, not plain CheatManager functions", [
+            ("pawn['Server - Cheat_KillMyself']", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local pawn=pc.Pawn\n"
+                       "if not pawn then return 'no pawn' end\n"
+                       "local ok,err=pcall(function() pawn['Server - Cheat_KillMyself'](pawn) end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", SNAPSHOT_HEALTH),
+            ("pawn['Server - Cheat_ToggleInfiniteAmmo']", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local pawn=pc.Pawn\n"
+                       "if not pawn then return 'no pawn' end\n"
+                       "local ok,err=pcall(function() pawn['Server - Cheat_ToggleInfiniteAmmo'](pawn) end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+            ("pc['Server - CheatDisablePerkCooldown']", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local ok,err=pcall(function() pc['Server - CheatDisablePerkCooldown'](pc) end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+            ("pc['Server - CheatEnablePerkCooldown']", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local ok,err=pcall(function() pc['Server - CheatEnablePerkCooldown'](pc) end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+        ]),
+        ("CheatManager -- no known cheap readable value", [
+            ("Grace Window Duration=15", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local ok,err=pcall(function() pc.CheatManager:CheatSetGraceWindowDuration(15.0) end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+            ("Grace Window Distance=500", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local ok,err=pcall(function() pc.CheatManager:CheatSetGraceWindowDistance(500.0) end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+            ("Unlock All Achievements", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local ok,err=pcall(function() pc.CheatManager:UnlockAllAchievements() end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+        ]),
+        ("PlayerController", [
+            ("UpdateXp(500)", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local ok,err=pcall(function() pc:UpdateXp(500) end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+            ("PropagateXPReward Broadcast(50,50)", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local ok,err=pcall(function() pc.PropagateXPReward:Broadcast(50,50) end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+        ]),
+        ("Own Pawn", [
+            ("MuteID(dummy SteamID)", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local ok,err=pcall(function() pc.Pawn:MuteID('76561198000000000') end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+            ("CanCreateKickVote (read-only query)",
+                       "local pc=UEHelpers.GetPlayerController()\n"
+                       "local t={}\n"
+                       "local ok,err=pcall(function() pc.Pawn:CanCreateKickVote(t) end)\n"
+                       "local val='n/a'\n"
+                       "if ok then local ok2,v=pcall(function() return t['CanCreateKickVote?'] end); if ok2 then val=tostring(v) end end\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)..' value='..val", None),
+        ]),
+        ("GameInstance", [
+            ("Set Achievement('Test_Achievement')", "local gi=UEHelpers.GetGameInstance()\n"
+                       "local ok,err=pcall(function() gi['Set Achievement'](gi,'Test_Achievement') end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+        ]),
+        ("Debug Library (CDO) -- read-only query, own value IS the result", [
+            ("ForceMinimalPlayerCountMeetCriteria", "local cls=StaticFindObject('/Script/Bodycam.Default__BodycamDebugLibrary')\n"
+                       "if not cls then return 'CDO not found' end\n"
+                       "local ok,res=pcall(function() return cls:ForceMinimalPlayerCountMeetCriteria() end)\n"
+                       "return 'ok='..tostring(ok)..' res='..tostring(res)", None),
+        ]),
+        ("GameMode -- needs an active hosted match, HOST ONLY", [
+            ("RestartRound()", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local role=pc:GetLocalRole()\n"
+                       "if role ~= 3 then return 'skipped: not host (LocalRole='..tostring(role).."
+                       "') -- AuthorityGameMode crashes the game if touched as a non-host client, see CAPABILITIES.md' end\n"
+                       "local gm=pc:GetWorld().AuthorityGameMode\n"
+                       "if not gm then return 'GameMode not found (need an active match)' end\n"
+                       "local ok,err=pcall(function() gm:RestartRound() end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", SNAPSHOT_MATCH_STARTED),
+            ("OnTrySelectTeam(1)", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local role=pc:GetLocalRole()\n"
+                       "if role ~= 3 then return 'skipped: not host (LocalRole='..tostring(role).."
+                       "') -- AuthorityGameMode crashes the game if touched as a non-host client, see CAPABILITIES.md' end\n"
+                       "local gm=pc:GetWorld().AuthorityGameMode\n"
+                       "if not gm then return 'GameMode not found (need an active match)' end\n"
+                       "local ok,err=pcall(function() gm:OnTrySelectTeam(1) end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", SNAPSHOT_TEAM),
+        ]),
+        ("GameState -- needs an active hosted match", [
+            ("TeamScore(0) (read-only query)", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local gs=pc:GetWorld().GameState\n"
+                       "if not gs then return 'GameState not found (need an active match)' end\n"
+                       "local t={}\n"
+                       "local ok,err=pcall(function() gs:TeamScore(0,t) end)\n"
+                       "local val='n/a'\n"
+                       "if ok then local ok2,v=pcall(function() return t.Score end); if ok2 then val=tostring(v) end end\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)..' value='..val", None),
+            ("UpdateTeamXP(25,25,true,true)", "local pc=UEHelpers.GetPlayerController()\n"
+                       "local gs=pc:GetWorld().GameState\n"
+                       "if not gs then return 'GameState not found (need an active match)' end\n"
+                       "local ok,err=pcall(function() gs:UpdateTeamXP(25,25,true,true) end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", SNAPSHOT_TEAM0_SCORE),
+        ]),
+        ("Ultra Dynamic Sky -- needs an active hosted match", [
+            ("Midnight (Broadcast)", "local sky\n"
+                       "for _,c in ipairs(FindAllOf('Ultra_Dynamic_Sky_C') or {}) do sky=c end\n"
+                       "if not sky then return 'sky actor not found (need an active match)' end\n"
+                       "local ok,err=pcall(function() sky.Midnight:Broadcast() end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+            ("Instant Time of Day Change (Broadcast)", "local sky\n"
+                       "for _,c in ipairs(FindAllOf('Ultra_Dynamic_Sky_C') or {}) do sky=c end\n"
+                       "if not sky then return 'sky actor not found (need an active match)' end\n"
+                       "local ok,err=pcall(function() sky['Instant Time of Day Change']:Broadcast() end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+        ]),
+        ("Equippable Item -- needs an active hosted match", [
+            ("Inspect() (first found)", "local items=FindAllOf('BP_EquippableItem_C') or {}\n"
+                       "if not items[1] then return 'no equippable item found (need an active match)' end\n"
+                       "local ok,err=pcall(function() items[1]:Inspect() end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+            ("Drop(0.0) (first found)", "local items=FindAllOf('BP_EquippableItem_C') or {}\n"
+                       "if not items[1] then return 'no equippable item found (need an active match)' end\n"
+                       "local ok,err=pcall(function() items[1]:Drop(0.0) end)\n"
+                       "return 'ok='..tostring(ok)..' err='..tostring(err)", None),
+        ]),
+    ]
+
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+
+        ui.info_banner(
+            self, title="Testing -- try before integrating",
+            text="One-click buttons for functions found via SDK-dump digging, not yet wrapped "
+                 "into a real tab. Where a cheap readable value exists (own health/team, a "
+                 "team's score, match-started), the button reads it before AND after the call "
+                 "and reports whether it actually changed -- not just whether the call errored. "
+                 "Tests with no such value only report ok/err; a blank changed= there is a gap "
+                 "in this tab, not proof the call did nothing. Rows marked \"needs an active "
+                 "hosted match\" will report a clean \"not found\" if you're just in the Lobby -- "
+                 "that's expected, see knowledge_base/CAPABILITIES.md.",
+        ).pack(fill="x", padx=PAD, pady=(PAD, PAD_SM))
+
+        buttons_frame = ui.frame(self)
+        buttons_frame.pack(fill="x", padx=PAD)
+        for category, items in self.TESTS:
+            ui.label(buttons_frame, text=category, bold=True).pack(anchor="w", pady=(PAD_SM, 2))
+            row = ui.frame(buttons_frame)
+            row.pack(fill="x", pady=(0, PAD_SM))
+            for label, lua, snapshot in items:
+                ui.button(row, label, command=lambda l=label, code=lua, s=snapshot: self._run(l, code, s)).pack(
+                    side="left", padx=(0, PAD_SM))
+
+        self._build_output_area()
+
+    def _run(self, label, lua, snapshot=None):
+        self.app.status(f"Running test: {label}...")
+
+        def work():
+            before = api.run_raw_lua(snapshot).strip() if snapshot else None
+            result = api.run_raw_lua(lua).strip()
+            after = api.run_raw_lua(snapshot).strip() if snapshot else None
+            return before, result, after
+
+        def done(data):
+            before, result, after = data
+            self._log(f">>> {label}", "cmd")
+            self._log(result if result else "(no output)", "ok")
+            if snapshot:
+                changed = before != after
+                tag = "ok" if changed else "err"
+                self._log(f"    value before={before}  after={after}  changed={changed}", tag)
+            self.app.status(f"Ran: {label}")
+
+        def err(e):
+            self._log(f">>> {label}", "cmd")
+            self._log(f"ERROR: {e}", "err")
+            self.app.status(f"ERROR: {e}", bad=True)
+
+        self.app.runner.run(work, done, err)
 
 
 class ConsoleTab(ConsoleShellMixin, ttk.Frame):
@@ -2089,6 +2428,7 @@ class App:
         self.loadout_tab = LoadoutTab(nb, self)
         self.speed_tab = SpeedTab(nb, self)
         self.saved_buttons_tab = SavedButtonsTab(nb, self)
+        self.testing_tab = TestingTab(nb, self)
         self.console_tab = ConsoleTab(nb, self)
         self.plugins_tab = PluginsTab(nb, self)
         self.shell_tab = ShellTab(nb, self)
@@ -2097,6 +2437,7 @@ class App:
         nb.add(self.loadout_tab, text="Loadout Editor")
         nb.add(self.speed_tab, text="Game Speed")
         nb.add(self.saved_buttons_tab, text="Saved Command Buttons")
+        nb.add(self.testing_tab, text="Testing")
         nb.add(self.console_tab, text="Console")
         nb.add(self.plugins_tab, text="Plugins")
         nb.add(self.shell_tab, text="Shell")

@@ -609,10 +609,18 @@ stable for years.
   `set_infinite_ammo`/`teleport_above`**: all thin wrappers around the
   game's own developer `CheatManager` (`BP_BodycamCheatManager`, reached via
   `pc.CheatManager` — the same object `SpeedTab`'s Slomo control already
-  used before any of this file's other additions). `CheatKillMyself` and
-  `CheatEndRound` (paired with `CheatSetGameTimer(1.0)`) were confirmed to
-  have a real, observed effect on `get_live_state()`, not just "the call
-  didn't error" — the rest only have that weaker level of confirmation. Also
+  used before any of this file's other additions). `CheatEndRound` (paired
+  with `CheatSetGameTimer(1.0)`) was confirmed to have a real, observed
+  effect on `get_live_state()`. **`kill_self`/`set_invincible`/
+  `set_infinite_ammo` were later confirmed, via careful real-gameplay
+  testing, to have NO actual effect** despite calling successfully with no
+  Lua error — this corrects an earlier wrong claim that `CheatKillMyself`
+  had been confirmed to kill the local character (it hadn't been verified
+  carefully enough). All three are left shipped as harmless no-ops rather
+  than removed; see `knowledge_base/CAPABILITIES.md` for the full
+  correction. `teleport_above`/`end_match` remain at the weaker "call
+  succeeded, no error" confirmation level — not re-tested and found broken
+  like the other three, just never carefully re-verified either way. Also
   discovered here: a `UFunction` with **multiple** out-parameters
   (`GetScoreToWin(int32&, int32&)`) flattens all of them into the *first*
   table argument passed, not one table per parameter.
@@ -688,7 +696,16 @@ stable for years.
   - `UEHelpers.GetGameStateChecked()`/`GetGameModeChecked()` don't exist in
     this UE4SS build. Use `pc:GetWorld().GameState` /
     `pc:GetWorld().AuthorityGameMode` instead — plain properties on the
-    `UWorld` from `pc:GetWorld()`.
+    `UWorld` from `pc:GetWorld()`. **`AuthorityGameMode` specifically
+    crashed the game** (confirmed live 2026-09-08, root-caused from a real
+    crash dump) when dereferenced (`:GetClass()`) as a non-hosting client —
+    it does NOT come back as Lua `nil` there (a plain `if not gm` check
+    does not catch it), it's just not a real usable object. Always check
+    `pc:GetLocalRole() == 3` (`ROLE_Authority`) before touching
+    `AuthorityGameMode` at all. `(FindAllOf('GameModeBase') or {})[1]` (the
+    pattern `get_match_info()` already uses) does not have this problem —
+    prefer it when a nil-safe "is there a GameMode at all" check is all you
+    need.
   - A UFUNCTION whose display name contains a space (`"Set Achievement"`,
     `"Instant Time of Day Change"`) can't use `:Name()` colon syntax —
     index it with brackets and pass `self` explicitly instead:
