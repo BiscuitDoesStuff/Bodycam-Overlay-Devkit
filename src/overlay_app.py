@@ -28,7 +28,6 @@ from tab_host import HostTab
 from tab_loadout import LoadoutTab
 from tab_speed import SpeedTab
 from tab_saved_buttons import SavedButtonsTab
-from tab_testing import TestingTab
 from tab_console import ConsoleTab
 from tab_plugins import PluginsTab
 from tab_shell import ShellTab
@@ -64,7 +63,6 @@ class App:
         self.loadout_tab = LoadoutTab(nb, self)
         self.speed_tab = SpeedTab(nb, self)
         self.saved_buttons_tab = SavedButtonsTab(nb, self)
-        self.testing_tab = TestingTab(nb, self)
         self.console_tab = ConsoleTab(nb, self)
         self.plugins_tab = PluginsTab(nb, self)
         self.shell_tab = ShellTab(nb, self)
@@ -73,7 +71,6 @@ class App:
         nb.add(self.loadout_tab, text="Loadout Editor")
         nb.add(self.speed_tab, text="Game Speed")
         nb.add(self.saved_buttons_tab, text="Saved Command Buttons")
-        nb.add(self.testing_tab, text="Testing")
         nb.add(self.console_tab, text="Console")
         nb.add(self.plugins_tab, text="Plugins")
         nb.add(self.shell_tab, text="Shell")
