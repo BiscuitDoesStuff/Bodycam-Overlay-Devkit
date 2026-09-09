@@ -4,3 +4,9 @@ build/
 dist/
 .DS_Store
 Thumbs.db
+
+# Active development / research / in-progress testing material -- local
+# only, never committed. Promote individual pieces into the real project
+# (src/, docs/, etc.) and commit those specifically once confirmed/finished;
+# don't commit this folder wholesale.
+/dev/
