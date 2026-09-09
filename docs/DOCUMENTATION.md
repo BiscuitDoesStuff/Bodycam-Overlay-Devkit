@@ -627,6 +627,88 @@ stable for years.
   `knowledge_base/CAPABILITIES.md`'s crash list for the full incident and
   candidate root causes — do not retry either function without a real
   second connected player and a fresh game restart first.
+- **`get_currency`/`set_currency`/`is_item_unlocked`/`unlock_item(s)`/
+  `lock_item`/`unlock_all_items`/`unlock_weapons_and_attachments`**: unlike
+  everything else in this section,
+  these don't call a `CheatManager` function at all — they read/write plain
+  properties directly on the live GameInstance (`GI_BodycamSteamBackend_C`,
+  reached via `UEHelpers.GetGameInstance()`): `ActualReissadPointsScore`/
+  `MaxAllowedReissadPoints` for currency, `PlayerInventoryItems` (a
+  `TSet<int32>`) for item ownership. Two more targeted approaches were tried
+  first and explicitly rejected — see `knowledge_base/CAPABILITIES.md`'s
+  "Currency and item-ownership investigation" section for the full trail:
+  `CheatManager:CheatGetReissadPoint(N)` runs with no error but doesn't
+  actually move the balance, and `CheatManager:PurchaseInventoryItemWithSoftCurrency`/
+  `GiveInventoryItem` are real and callable (once
+  `ValidatePurchaseInventoryItemWithSoftCurrency()` is called first to clear
+  an initial nullptr guard error) but produced no observable effect in
+  testing, most likely because this build talks to a mock/offline Steam
+  inventory layer. `unlock_all_items()` sprays every integer 1–3250 into
+  `PlayerInventoryItems` rather than a precise catalog id list, because
+  reading real ids from `DT_NewShopItem` crashes the game by every method
+  tried (`GetDataTableRowFromName`, `GetDataTableColumnAsString` — both via
+  `Default__DataTableFunctionLibrary`) — confirmed live and safe: ids that
+  don't correspond to a real item are inert extra set entries, not errors.
+  Visually confirmed in-game (not just via a live property read) that
+  `PlayerInventoryItems` membership alone is enough for the Locker/Shop UI
+  to treat an item as owned — no `PlayerSkin.sav` entry needed. Also
+  confirmed by the app's maintainer: unlocks made this way reset on a game
+  restart, same as the currency override — both are live-session writes on
+  the GameInstance, not permanent saves, and work fine for the rest of the
+  session they're used in. Important asymmetry, also confirmed by the
+  maintainer: an item bought for real through the in-game Shop UI *while*
+  `set_currency()`'s boosted balance is active DOES survive a restart — a
+  real purchase goes through the game's own transaction flow and gets
+  written back to the real backend, unlike the raw `PlayerInventoryItems`
+  write these unlock functions make. For a permanent unlock, boost currency
+  and buy for real in the Shop; use these functions for immediate,
+  this-session access instead.
+  `unlock_weapons_and_attachments()` is the same spray restricted to ids
+  1–999, on the theory that weapon/attachment ids cluster below the
+  skin/operator/badge range — inferred from a sample of exactly 4 known real
+  ids (2 weapon skins under 1000, a badge and an operator skin both at or
+  above 1000), not from a read category field. Treat the 999 cutoff as a
+  guess worth revisiting, not a verified boundary.
+- **Lua/UE4SS calling-convention gotchas worth knowing before adding more
+  functions to this file** (all confirmed live 2026-09-08 during a full
+  pass over the SDK header dump — see `knowledge_base/CAPABILITIES.md`'s
+  "SDK full reflection pass" section for the full trail):
+  - A UFUNCTION that looks plain in the header dump but has a matching
+    `X__DelegateSignature` entry next to it is actually a **multicast
+    delegate property** — calling it directly fails with `"attempt to call
+    a MulticastDelegateProperty value"`. Call `:Broadcast(args...)` on the
+    property instead (confirmed for `PropagateXPReward`, `Midnight`,
+    `Instant Time of Day Change`).
+  - The header dump renders Blueprint class names with a fake `A`/`U`
+    type-prefix (`AGT_Bodycam_C`, `AUltra_Dynamic_Sky_C`) that `FindAllOf`
+    will not accept — it needs the un-prefixed name (`GT_Bodycam_C`,
+    `Ultra_Dynamic_Sky_C`). Passing the prefixed name doesn't error, it
+    just silently returns `nil`, which looks identical to "zero live
+    instances" and is easy to misdiagnose as a class not being loaded yet.
+  - `UEHelpers.GetGameStateChecked()`/`GetGameModeChecked()` don't exist in
+    this UE4SS build. Use `pc:GetWorld().GameState` /
+    `pc:GetWorld().AuthorityGameMode` instead — plain properties on the
+    `UWorld` from `pc:GetWorld()`.
+  - A UFUNCTION whose display name contains a space (`"Set Achievement"`,
+    `"Instant Time of Day Change"`) can't use `:Name()` colon syntax —
+    index it with brackets and pass `self` explicitly instead:
+    `obj['Set Achievement'](obj, 'Name')`.
+  - A `UBlueprintFunctionLibrary` function with no natural instance to call
+    it on is reachable via its Class Default Object:
+    `StaticFindObject('/Script/Bodycam.Default__SomeLibrary')`, then call
+    the method on that directly — confirmed safe, distinct from the
+    `IsChildOf`/`GetSuperClass`-on-a-raw-UClass crash class documented
+    above (a CDO is a normal instance, not a bare class reference).
+  - `"attempt to call a TrivialObject value"` means UE4SS found the named
+    interface function but the concrete class never overrides it — it only
+    inherits the interface's empty default body. Safe, not a crash; treat
+    it as "this class doesn't actually implement this," not as a bug to
+    work around.
+  - GameMode, GameState, and level-scoped environment actors
+    (`Ultra_Dynamic_Sky_C`) only exist while actually hosting/in a real
+    match — none of them are instantiated while sitting in the Lobby/menu,
+    which is easy to mistake for "these functions aren't reachable" when
+    the real issue is "there's nothing to call them on yet."
 
 ### 5.6 `overlay_app.py` — a few non-obvious mechanisms
 

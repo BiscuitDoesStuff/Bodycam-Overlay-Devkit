@@ -1031,12 +1031,62 @@ class LoadoutTab(ttk.Frame):
             side="left", padx=PAD_SM + 2)
         ui.button(top, "Restore Backup...", command=self._restore_backup).pack(side="left", padx=PAD_SM + 2)
 
+        ui.info_banner(
+            self, title="Currency & Unlocks",
+            text="Both write directly to the live GameInstance, not the save file -- "
+                 "no purchase or cheat-menu call involved. Currency is a temporary "
+                 "boost, not a permanent grant: any value set above the real cap "
+                 "(40,000) gets reset back to 40,000 by the next real currency update "
+                 "(a match ending, a Steam Cloud sync, a restart) -- that's expected, "
+                 "just re-set it when you want the boost back. Item unlocks reset the "
+                 "same way -- confirmed by the app's maintainer: both unlock buttons' "
+                 "effects clear on a game restart, same as currency, but work fine for "
+                 "the rest of the session they're used in. Re-run whichever unlock "
+                 "button you want after every restart. For a PERMANENT unlock instead: "
+                 "boost currency above, then buy the item for real in the in-game Shop "
+                 "-- a real purchase sticks even though the currency number itself "
+                 "resets; only the unlock buttons' own writes don't. "
+                 "\"Unlock All Items\" sprays "
+                 "every id in a plausible "
+                 "range rather than a precise catalog list (there's no safe way to read "
+                 "the real one -- see knowledge_base/CAPABILITIES.md); ids that don't "
+                 "correspond to a real item are harmless.",
+        ).pack(fill="x", padx=PAD, pady=(PAD, 0))
+
+        unlocks = ui.frame(self, panel=True)
+        unlocks.pack(fill="x", padx=PAD, pady=(PAD_SM, PAD))
+
+        cur_row = ui.frame(unlocks, panel=True)
+        cur_row.pack(fill="x", padx=PAD_SM, pady=(PAD_SM, 2))
+        ui.label(cur_row, text="Reissad Points:", bold=True, bg=PANEL).pack(side="left")
+        self.currency_lbl = ui.label(cur_row, text="-", bg=INPUT, anchor="w", width=16)
+        self.currency_lbl.pack(side="left", padx=PAD_SM + 2, ipady=3)
+        ui.button(cur_row, "Refresh", command=self._refresh_currency).pack(side="left")
+        self.currency_var = tk.StringVar(value="1000000")
+        ui.entry(cur_row, textvariable=self.currency_var, width=10).pack(side="left", padx=(PAD_LG, 2))
+        ui.button(cur_row, "Set", kind="accent", command=self._set_currency).pack(side="left")
+
+        unlock_row = ui.frame(unlocks, panel=True)
+        unlock_row.pack(fill="x", padx=PAD_SM, pady=(2, PAD_SM))
+        ui.button(unlock_row, "Unlock All Items...", kind="accent",
+                  command=self._unlock_all_items).pack(side="left")
+        ui.button(unlock_row, "Unlock Guns & Attachments...",
+                  command=self._unlock_weapons).pack(side="left", padx=(PAD_SM + 2, 0))
+
+        unlock_row2 = ui.frame(unlocks, panel=True)
+        unlock_row2.pack(fill="x", padx=PAD_SM, pady=(0, PAD_SM))
+        ui.label(unlock_row2, text="Unlock item ID:", bg=PANEL).pack(side="left")
+        self.unlock_id_var = tk.StringVar()
+        ui.entry(unlock_row2, textvariable=self.unlock_id_var, width=8).pack(side="left", padx=(PAD_SM, 2))
+        ui.button(unlock_row2, "Unlock", command=self._unlock_single_id).pack(side="left")
+
         self.body = ui.frame(self)
         self.body.pack(fill="both", expand=True, padx=PAD, pady=PAD)
 
         self._rows = {}
         self._build_rows()
         self._load_loadout_count()
+        self._refresh_currency()
 
     def _build_rows(self):
         specs = [("operator", "Operator")] + [
@@ -1206,6 +1256,93 @@ class LoadoutTab(ttk.Frame):
             self._refresh()
 
         self.app.runner.run(work, done, self.app.on_error())
+
+    def _refresh_currency(self):
+        def work():
+            return api.get_currency()
+
+        def done(data):
+            self.currency_lbl.configure(text=f'{data["balance"]:,} / {data["cap"]:,}')
+
+        self.app.runner.run(work, done, self.app.on_error("currency read failed"))
+
+    def _set_currency(self):
+        try:
+            amount = int(self.currency_var.get())
+        except ValueError:
+            messagebox.showerror("Invalid amount", "Enter a whole number.")
+            return
+        self.app.status(f"Setting Reissad Points to {amount:,}...")
+
+        def work():
+            return api.set_currency(amount)
+
+        def done(data):
+            self.currency_lbl.configure(text=f'{data["balance"]:,} / {data["cap"]:,}')
+            self.app.status(f"Reissad Points set to {data['balance']:,} "
+                             "(temporary -- resets to 40,000 on the next real currency update)")
+
+        self.app.runner.run(work, done, self.app.on_error("set currency failed"))
+
+    def _unlock_all_items(self):
+        if not messagebox.askyesno(
+                "Unlock All Items",
+                "This sprays every item id from 1-3250 into your live inventory "
+                "ownership list. It's a blunt sweep, not a precise catalog list -- "
+                "see the banner above. Confirmed: this resets on a game restart, "
+                "same as the currency override -- re-run it each session you want "
+                "it in. There's also no undo button for this in the UI.\n\n"
+                "Proceed?"):
+            return
+        self.app.status("Unlocking all items (1-3250)...")
+
+        def work():
+            return api.unlock_all_items(max_id=3250)
+
+        def done(_result):
+            self.app.status("Unlock sweep complete -- check the in-game Locker/Shop.")
+
+        self.app.runner.run(work, done, self.app.on_error("unlock all failed"))
+
+    def _unlock_weapons(self):
+        if not messagebox.askyesno(
+                "Unlock Guns & Attachments",
+                "This sprays item ids 1-999 only, instead of the full 1-3250 range "
+                "\"Unlock All Items\" covers. This is a BEST-EFFORT guess, not a "
+                "precise weapons-only filter -- there's no safe way to read an "
+                "item's real category (see knowledge_base/CAPABILITIES.md). The cutoff "
+                "is inferred from just 4 known ids: two real weapon skins (128, 281) "
+                "were both under 1000, two real non-weapon items (a badge and an "
+                "operator skin) were both 1000+. It will likely also unlock some "
+                "non-weapon items under 1000, and will miss any weapon/attachment id "
+                "that happens to be 1000 or higher.\n\n"
+                "Proceed?"):
+            return
+        self.app.status("Unlocking guns & attachments (1-999)...")
+
+        def work():
+            return api.unlock_weapons_and_attachments()
+
+        def done(_result):
+            self.app.status("Weapons/attachments unlock sweep complete -- check the in-game Locker/Shop.")
+
+        self.app.runner.run(work, done, self.app.on_error("unlock weapons failed"))
+
+    def _unlock_single_id(self):
+        raw = self.unlock_id_var.get().strip()
+        if not raw.isdigit():
+            messagebox.showerror("Invalid ID", "Enter a whole number item ID.")
+            return
+        item_id = int(raw)
+        self.app.status(f"Unlocking item ID {item_id}...")
+
+        def work():
+            return api.unlock_item(item_id)
+
+        def done(_result):
+            self.app.status(f"Item ID {item_id} unlocked -- check the in-game Locker/Shop.")
+
+        self.app.runner.run(work, done, self.app.on_error("unlock failed"))
 
 
 def run_cheat_snippet(app, snippet, on_extra_done=None):
