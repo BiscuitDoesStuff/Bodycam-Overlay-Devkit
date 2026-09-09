@@ -130,6 +130,28 @@ after installing the mod.
   anything if someone besides you is connected.
 
 **Loadout Editor tab**
+- **Currency & Unlocks**: set your Reissad Points balance directly (a live
+  GameInstance property write, not a purchase). This is a temporary boost,
+  not a permanent grant -- any value set above the real cap (40,000) resets
+  back to 40,000 on the next real currency update (a match ending, a Steam
+  Cloud sync, a restart), by design; just re-set it when you want the boost
+  back. **For a permanent unlock, boost currency and buy the item for real
+  in the in-game Shop instead** -- a real purchase made this way sticks
+  across restarts even though the currency number itself doesn't. Unlock
+  items via the game's own real ownership list (`PlayerInventoryItems`) --
+  confirmed to reset the same way currency does on a game restart, though
+  both unlock buttons work fine for the rest of the session they're used in;
+  re-run one after every restart if you want it again. **Unlock All Items**
+  sprays every id
+  1-3250 into that list in one shot -- there's no safe way to read the
+  game's actual catalog id list (see `knowledge_base/CAPABILITIES.md`), so
+  this covers a plausible range instead of a precise one; ids that don't
+  match a real item are harmless. **Unlock Guns & Attachments** does the
+  same thing but only sprays 1-999 -- a best-effort guess at where
+  weapon/attachment ids end and skins/operators/badges begin, inferred from
+  just 4 known real ids, not a real category filter (it will still catch
+  some non-weapon items under 1000, and miss any real weapon id at 1000 or
+  above). A single-ID field is also available for a targeted unlock.
 - Pick any of your loadouts (count is read from the save file, not
   hardcoded).
 - **Operator**, and each of the 5 slots, has a **Change** button that opens a

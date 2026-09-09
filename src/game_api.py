@@ -1292,3 +1292,194 @@ local ok = pcall(function() mgr:SelectNewCurrentLoadout({loadout_idx}) end)
 return 'SelectNewCurrentLoadout({loadout_idx}) ok=' .. tostring(ok)
 """
     return bc.run_lua(lua, timeout=timeout)
+
+
+# --------------------------------------------------------------------------- currency / item unlocks (live GameInstance)
+#
+# Both confirmed live 2026-09-07 -- see knowledge_base/CAPABILITIES.md's
+# "Currency and item-ownership investigation" section for the full trail,
+# including two dead ends that are NOT used here:
+#   - CheatManager:CheatGetReissadPoint(N) runs with no error but does not
+#     actually change the balance -- confirmed by reading it before/after.
+#   - CheatManager:PurchaseInventoryItemWithSoftCurrency(id) / GiveInventoryItem(id)
+#     are real, callable, and don't crash, but produced no observable effect
+#     in three tries even after clearing their initial nullptr guard error --
+#     this build most likely runs against a mock/offline Steam inventory
+#     layer (BodycamSteamMock.hpp exists in the SDK dump) that these silently
+#     no-op against. Not used for this reason, not because they're unsafe.
+#
+# What IS used: both currency and item ownership are plain properties on the
+# live GameInstance (class GI_BodycamSteamBackend_C) -- a direct property
+# write / TSet mutation, the same low-risk category as every other live
+# UObject property this app already writes (e.g. Loadout slot names,
+# HMS_bBotsMethod). No UFUNCTION call, no struct marshaling, so none of the
+# crash classes documented elsewhere in this file apply.
+def get_currency(timeout=15):
+    """Reads the live Reissad Points balance and cap straight from the
+    GameInstance. Confirmed live: matches what the in-game currency display
+    presumably shows (not independently screen-verified, but this is the
+    same field CheatGetReissadPoint's test read from, and it's the field
+    set_currency() below writes to)."""
+    lua = r"""
+local gi = UEHelpers.GetGameInstance()
+return tostring(gi.ActualReissadPointsScore) .. '|' .. tostring(gi.MaxAllowedReissadPoints)
+"""
+    body = bc.run_lua(lua, timeout=timeout).strip()
+    balance_s, cap_s = body.split("|", 1)
+    return {"balance": int(balance_s), "cap": int(cap_s)}
+
+
+def set_currency(amount, timeout=15):
+    """Directly sets Reissad Points balance (and raises the cap to match if
+    needed, so the new balance isn't silently clamped) via a live property
+    write on the GameInstance -- confirmed live (2026-09-07): balance read
+    back immediately afterward matched what was set, and stayed changed
+    across repeated reads.
+
+    This is a live override, not a real currency grant, and gets reset by
+    the next thing that legitimately touches Reissad Points -- confirmed
+    twice: (1) a game restart re-syncs the real balance from scratch
+    (confirmed live: set to 999999, the game crashed/relaunched for an
+    unrelated reason, balance was back to its real prior value afterward);
+    (2) per the app's maintainer's own observation, a value set *above* the
+    real cap (40000 as of this writing) reverts back down to 40000 on the
+    next currency-affecting event even without a restart -- a match ending,
+    a Steam Cloud sync, etc. This is expected and intended (per the
+    maintainer), not a bug in this override -- treat set_currency() as a
+    temporary boost that lasts until the next real currency update, not a
+    permanent change. Re-run it whenever you want the boost back.
+
+    Important asymmetry, also confirmed by the app's maintainer: an item
+    actually bought through the real in-game Shop UI *while* the boosted
+    balance is active DOES survive a restart -- only the currency number
+    itself resets, not a purchase legitimately made with it (a real purchase
+    goes through the game's own transaction flow and gets written back to
+    the real backend; the balance override has nothing behind it once the
+    next resync happens). For a *permanent* unlock, boost currency here and
+    buy it for real in the Shop -- unlock_item()/unlock_all_items() below are
+    for immediate, this-session access, not a lasting change (see their own
+    docstrings).
+
+    Unlike CheatManager:CheatGetReissadPoint(N) (confirmed NOT to work, see
+    the section header above), this reaches all the way through -- there is
+    no known cooldown on a raw property write, since it never calls the
+    purchase/grant functions that a cooldown (if the game enforces one)
+    would actually be watching."""
+    amount = int(amount)
+    lua = f"""
+local gi = UEHelpers.GetGameInstance()
+if {amount} > gi.MaxAllowedReissadPoints then gi.MaxAllowedReissadPoints = {amount} end
+gi.ActualReissadPointsScore = {amount}
+return tostring(gi.ActualReissadPointsScore) .. '|' .. tostring(gi.MaxAllowedReissadPoints)
+"""
+    body = bc.run_lua(lua, timeout=timeout).strip()
+    balance_s, cap_s = body.split("|", 1)
+    return {"balance": int(balance_s), "cap": int(cap_s)}
+
+
+def is_item_unlocked(item_id, timeout=15):
+    """Checks GameInstance.PlayerInventoryItems (a live TSet<int32> of owned
+    item ids) for one id -- confirmed live to genuinely reflect real
+    ownership: cross-checked against real itemdefid values read directly
+    from PlayerSkin.sav's Weapons/Skin/Badge arrays."""
+    lua = f"""
+local gi = UEHelpers.GetGameInstance()
+return tostring(gi.PlayerInventoryItems:Contains({int(item_id)}))
+"""
+    return bc.run_lua(lua, timeout=timeout).strip() == "true"
+
+
+def unlock_items(item_ids, timeout=20):
+    """Adds one or more item ids to GameInstance.PlayerInventoryItems (a live
+    TSet<int32>) -- confirmed live 2026-09-07, both mechanically (add/remove/
+    contains all work cleanly on a throwaway id) and visually in-game (a
+    batch of 17 speculative ids unlocked 3 real skins -- Zbr, AirforceOne,
+    Executioner -- in the Locker's Skins tab, with NO other file touched).
+    Membership in this TSet alone is enough for the Locker/Shop UI to treat
+    an item as owned; no PlayerSkin.sav entry is needed.
+
+    `item_ids` that don't correspond to a real catalog item are harmless --
+    confirmed live (2000 was in that same batch and produced no error, crash,
+    or visible effect on its own). This is what makes unlock_all_items()
+    below a reasonable approach despite there being no safe way to read the
+    real catalog's id list (see CAPABILITIES.md -- every DataTable row-read
+    path tried for this crashed the game).
+
+    Like set_currency() on the same GameInstance, this is a live-session
+    override, not a permanent save: confirmed by the app's maintainer that
+    unlocks made this way reset on a game restart, same as currency does.
+    Re-run whichever unlock call/button you want after every restart. For a
+    permanent unlock, use set_currency() to boost your balance and buy the
+    item for real through the in-game Shop instead -- a real purchase sticks
+    (see set_currency()'s docstring); this function does not."""
+    ids = [int(i) for i in item_ids]
+    if not ids:
+        return
+    ids_lua = "{" + ",".join(str(i) for i in ids) + "}"
+    lua = f"""
+local gi = UEHelpers.GetGameInstance()
+local s = gi.PlayerInventoryItems
+for _, id in ipairs({ids_lua}) do
+    pcall(function() s:Add(id) end)
+end
+return 'done'
+"""
+    bc.run_lua(lua, timeout=timeout)
+
+
+def unlock_item(item_id, timeout=15):
+    """Single-id convenience wrapper around unlock_items()."""
+    unlock_items([item_id], timeout=timeout)
+
+
+def lock_item(item_id, timeout=15):
+    """Removes one id from GameInstance.PlayerInventoryItems -- confirmed
+    live (add/remove/contains round-trip tested on a throwaway id). Exists
+    mainly to undo a mistaken unlock_item() call, not as a shipped "re-lock"
+    feature -- the game itself has no UI for taking an item away."""
+    lua = f"""
+local gi = UEHelpers.GetGameInstance()
+pcall(function() gi.PlayerInventoryItems:Remove({int(item_id)}) end)
+return 'done'
+"""
+    bc.run_lua(lua, timeout=timeout)
+
+
+def unlock_all_items(max_id=3250, timeout=60):
+    """Sprays every integer from 1 to max_id into PlayerInventoryItems in one
+    batched call. There is no known safe way to read the real catalog's
+    actual id list (DT_NewShopItem has 2131 rows; both DataTable row-reading
+    approaches tried crashed the game live -- see CAPABILITIES.md), so this
+    blindly covers a plausible range instead of a precise one. Confirmed
+    real ids seen so far (128, 281, 1006, 1013, plus at least 3 more
+    somewhere in the 2026-09-07 test batch) all fall well under 3000; the
+    default (3250, raised from an initial 3000 per the app maintainer's own
+    request) leaves some headroom above that. Raise max_id further if a
+    future game update adds items past this range. ids that don't
+    correspond to anything real are inert (confirmed live, see
+    unlock_items()'s docstring) -- the only real cost of a larger max_id is
+    a slightly bigger one-time Lua loop, not risk."""
+    unlock_items(range(1, int(max_id) + 1), timeout=timeout)
+
+
+# The id/category boundary below is an INFERENCE, not a confirmed fact -- there
+# is no safe way to read an item's real category (see the DataTable-read
+# crashes in CAPABILITIES.md). It's based on a sample of exactly 4 confirmed
+# -real ids: two weapon skins (128, 281, both < 1000) and two non-weapon items
+# (1006 badge, 1013 skin, both >= 1000). Treat this as a best-effort filter,
+# not a precise one -- it will likely also sweep up some non-weapon items
+# that happen to live under 1000, and will miss any real weapon/attachment id
+# that happens to be 1000 or higher.
+_WEAPON_ID_CEILING = 999
+
+
+def unlock_weapons_and_attachments(timeout=60):
+    """Best-effort "guns and attachments only" unlock -- sprays ids 1 through
+    _WEAPON_ID_CEILING (999) into PlayerInventoryItems, instead of the full
+    catalog range unlock_all_items() covers. See _WEAPON_ID_CEILING's comment
+    just above for exactly how thin the evidence behind that cutoff is (4
+    known ids, not a read category field) -- this is a reasonable guess, not
+    a verified weapons-only filter. Same underlying mechanism as
+    unlock_all_items() otherwise (a plain TSet spray, ids that don't
+    correspond to anything real are harmless)."""
+    unlock_all_items(max_id=_WEAPON_ID_CEILING, timeout=timeout)
