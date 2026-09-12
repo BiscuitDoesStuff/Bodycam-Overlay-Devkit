@@ -1,0 +1,17 @@
+name: release
+on: { push: { tags: ["v*"] } }
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: { python-version: "3.13" }
+      - run: pip install -r requirements.txt
+      - run: python tests/test_offline.py
+      - shell: bash
+        run: grep -q "__version__ = \"${GITHUB_REF_NAME#v}\"" src/overlay_app.py
+      - run: python -m PyInstaller --noconfirm BodycamOverlay.spec
+      - uses: softprops/action-gh-release@v3
+        with: { files: dist/BodycamOverlay.exe, generate_release_notes: true }

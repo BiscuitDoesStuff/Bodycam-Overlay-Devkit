@@ -1,6 +1,6 @@
 --[[
   ClaudeBridge -- file-based RPC into a live UE4SS-modded game.
-  Protocol, safety rationale, and the Python side: see docs/DOCUMENTATION.md
+  Protocol, safety rationale, and the Python side: see docs/INTERNALS.md
   section 5.1 in the repo root.
 
   Install:
@@ -22,6 +22,11 @@ local lastId, busy = nil, false
 
 os.execute('mkdir "' .. DIR .. '" 2>nul')
 
+do -- truncate the log once per game launch; note() below only ever appends
+    local f = io.open(LOG, "w")
+    if f then f:close() end
+end
+
 local function note(s)
     print("[ClaudeBridge] " .. s .. "\n")
     local f = io.open(LOG, "a")
@@ -42,7 +47,8 @@ local function writeResp(id, ok, body)
     f:write(tostring(id) .. "\n" .. (ok and "OK" or "ERR") .. "\n" .. body)
     f:close()
     os.remove(RESP)
-    os.rename(TMP, RESP)
+    local renOk, renErr = os.rename(TMP, RESP)
+    if not renOk then note("resp.txt rename failed: " .. tostring(renErr)) end
 end
 
 ---------------------------------------------------------------------------
@@ -76,6 +82,15 @@ local function render(v, depth, seen)
     return tostring(v)
 end
 
+local function getPC()
+    -- UEHelpers.GetPlayerController() returns UE4SS's TrivialObject
+    -- placeholder (not nil) when there's no real PC yet, same trap as
+    -- getPawn() below guards against -- without isValid(), `pc() ~= nil`
+    -- is always true and callers indexing into it can hard-crash.
+    local p = UEHelpers.GetPlayerController()
+    return isValid(p) and p or nil
+end
+
 local function getPawn()
     local p = UEHelpers.GetPlayerController()
     if isValid(p) then
@@ -86,6 +101,16 @@ local function getPawn()
     end
     local ok, v = pcall(function() return UEHelpers.GetPlayer() end)
     return (ok and isValid(v)) and v or nil
+end
+
+local function getGameMode()
+    local ok, all = pcall(function() return FindAllOf('GameModeBase') end)
+    return (ok and all and all[1]) or nil
+end
+
+local function getGameState()
+    local ok, all = pcall(function() return FindAllOf('GameStateBase') end)
+    return (ok and all and all[1]) or nil
 end
 
 --- Walk the class chain. ForEachProperty/ForEachFunction only report
@@ -218,6 +243,7 @@ local function handle(id, src)
         _G.print, _G.props, _G.funcs, _G.count = cap, props, funcs, count
         _G.render, _G.valid, _G.pawn, _G.chainOf, _G.has =
             render, isValid, getPawn, chainOf, has
+        _G.pc, _G.gm, _G.gs = getPC, getGameMode, getGameState
         _G.UEHelpers = UEHelpers
 
         local ok, res = pcall(chunk)

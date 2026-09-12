@@ -5,6 +5,9 @@ windowed or borderless mode so this window can sit visually on top of it.
 Run with:  python src/overlay_app.py
 Requires the game to be running with the ClaudeBridge UE4SS mod loaded.
 """
+__version__ = "1.0.0"
+
+import ctypes
 import logging
 import logging.handlers
 import os
@@ -21,7 +24,7 @@ from PIL import Image, ImageDraw
 import game_api as api
 import install_bridge
 import ui_theme as ui
-from ui_theme import PANEL, FG, MUTED, BAD, PAD, PAD_SM
+from ui_theme import PANEL, FG, MUTED, GOOD, BAD, PAD, PAD_SM
 
 from ui_common import AsyncRunner
 from tab_host import HostTab
@@ -36,6 +39,9 @@ from tab_about import AboutTab
 # A --windowed PyInstaller build has no console: print() output (and, in some
 # builds, an unhandled exception's default stderr traceback) goes nowhere.
 # Log to a capped file instead so a crash/error is diagnosable after the fact.
+# Configured before api.load_config() runs, so a corrupt hand-edited config
+# file still gets its error logged instead of silently killing the exe.
+os.makedirs(api._CONFIG_DIR, exist_ok=True)
 _log_handler = logging.handlers.RotatingFileHandler(
     os.path.join(api._CONFIG_DIR, "overlay.log"), maxBytes=1_000_000, backupCount=2, encoding="utf-8")
 _log_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
@@ -43,12 +49,27 @@ logging.getLogger().addHandler(_log_handler)
 logging.getLogger().setLevel(logging.INFO)
 
 
+_MINSIZE = (680, 480)
+
+
 class App:
+    version = __version__
+
     def __init__(self):
+        try:
+            # Without this, Windows scales the whole window as a bitmap on
+            # a scaled display -- blurry text/UI instead of Tk rendering at
+            # the real resolution itself.
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:
+            pass
+
         self.root = tk.Tk()
-        self.root.title("Bodycam Overlay")
-        self.root.geometry("1920x1080")
-        self.root.minsize(680, 480)
+        self.root.title(f"Bodycam Overlay v{__version__}")
+        w = max(int(self.root.winfo_screenwidth() * 0.7), _MINSIZE[0])
+        h = max(int(self.root.winfo_screenheight() * 0.7), _MINSIZE[1])
+        self.root.geometry(f"{w}x{h}")
+        self.root.minsize(*_MINSIZE)
         self.root.attributes("-topmost", True)
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
         self.root.report_callback_exception = self._log_tk_exception
@@ -56,9 +77,11 @@ class App:
         ui.apply(self.root)
 
         self.runner = AsyncRunner(self.root)
+        self._first_ok = False
 
         nb = ttk.Notebook(self.root)
         nb.pack(fill="both", expand=True, padx=PAD_SM, pady=(PAD_SM, 0))
+        nb.enable_traversal()  # Ctrl+Tab / Ctrl+Shift+Tab switches tabs
         self.host_tab = HostTab(nb, self)
         self.loadout_tab = LoadoutTab(nb, self)
         self.speed_tab = SpeedTab(nb, self)
@@ -84,8 +107,12 @@ class App:
         ttk.Separator(bottom, orient="horizontal").pack(fill="x", side="top")
 
         self.status_var = tk.StringVar(value="Starting...")
-        self.status_lbl = ui.label(bottom, textvariable=self.status_var, bg=PANEL, anchor="w")
+        self.status_lbl = ui.label(bottom, textvariable=self.status_var, bg=PANEL, anchor="w", justify="left")
         self.status_lbl.pack(fill="x", side="left", expand=True, padx=(PAD, PAD_SM), pady=PAD_SM + 1)
+        # A long status message (a bridge error, a full path) used to just
+        # clip/overflow instead of wrapping -- rewrap to the label's own
+        # current width on every resize, same pattern as ui_theme.info_banner.
+        self.status_lbl.bind("<Configure>", lambda e: self.status_lbl.configure(wraplength=max(200, e.width - 4)))
 
         conn_frame = ui.frame(bottom, panel=True)
         conn_frame.pack(side="right", padx=PAD, pady=PAD_SM)
@@ -103,7 +130,7 @@ class App:
 
     def _start_tray_icon(self):
         """A real taskbar/system-tray presence with a proper Exit option --
-        see docs/DOCUMENTATION.md §5.6 for why the window itself only hides."""
+        see docs/INTERNALS.md §5.6 for why the window itself only hides."""
         try:
             image = Image.open(os.path.join(api._HERE, "app_icon.ico")).convert("RGBA")
         except Exception:
@@ -123,7 +150,7 @@ class App:
 
     def quit_app(self):
         """Actually terminates the app (the tray's Exit item). Uses os._exit
-        rather than a normal mainloop return -- see docs/DOCUMENTATION.md §5.6."""
+        rather than a normal mainloop return -- see docs/INTERNALS.md §5.6."""
         try:
             self.tray_icon.stop()
         except Exception:
@@ -137,16 +164,35 @@ class App:
     def _run_setup_check(self):
         """Runs once at startup: makes sure ClaudeBridge (and, if it's already
         on this machine, the bundled UE4SS copy) is in place before the first
-        connection poll. See install_bridge.py / docs/DOCUMENTATION.md §5.4."""
+        connection poll. See install_bridge.py / docs/INTERNALS.md §5.4."""
         def prompt_for_path():
-            messagebox.showinfo(
-                "Bodycam not found",
-                "Couldn't auto-find your Bodycam install. Pick its Binaries\\Win64 folder next.")
-            path = filedialog.askdirectory(title="Select Bodycam's Binaries\\Win64 folder")
-            return path or None
+            # Called by install_bridge.ensure_setup() from this AsyncRunner worker
+            # thread, but messagebox/filedialog must run on the Tk main thread --
+            # hop over with root.after(0, ...) and block this thread on the result.
+            result = {}
+            done_event = threading.Event()
+
+            def ask():
+                try:
+                    messagebox.showinfo(
+                        "Bodycam not found",
+                        "Couldn't auto-find your Bodycam install. Pick its Binaries\\Win64 folder next.")
+                    path = filedialog.askdirectory(title="Select Bodycam's Binaries\\Win64 folder")
+                    result["path"] = path or None
+                finally:
+                    done_event.set()
+
+            self.root.after(0, ask)
+            done_event.wait()
+            return result.get("path")
 
         def work():
-            return install_bridge.ensure_setup(prompt_for_path=prompt_for_path, on_status=self.status)
+            # on_status is also called from this worker thread -- hop to the
+            # main thread the same way prompt_for_path does above, since
+            # self.status() touches Tk widgets.
+            return install_bridge.ensure_setup(
+                prompt_for_path=prompt_for_path,
+                on_status=lambda msg: self.root.after(0, self.status, msg))
 
         def done(result):
             if result["reason"] == "needs_ue4ss":
@@ -166,6 +212,8 @@ class App:
                 self.status("UE4SS + ClaudeBridge installed -- restart Bodycam.")
             elif result["reason"] == "installed_bridge":
                 self.status("ClaudeBridge installed on top of existing UE4SS -- restart Bodycam if it's running.")
+            elif result["reason"] == "updated_bridge":
+                self.status("ClaudeBridge updated -- restart Bodycam")
             self._poll_connection()
 
         def err(e):
@@ -181,8 +229,13 @@ class App:
     def on_error(self, prefix="ERROR"):
         """Shorthand for the common AsyncRunner error handler: show the
         exception in the status bar with a prefix, e.g. as the third argument
-        to self.runner.run(work, done, ...)."""
-        return lambda e: self.status(f"{prefix}: {e}", bad=True)
+        to self.runner.run(work, done, ...). The status bar truncates/clips
+        long messages, so also logging.error() the full text here means it's
+        still in overlay.log even when it wasn't fully visible on screen."""
+        def _handle(e):
+            logging.error(f"{prefix}: {e}")
+            self.status(f"{prefix}: {e}", bad=True)
+        return _handle
 
     def _log_tk_exception(self, exc_type, exc_value, tb):
         """Replaces Tkinter's default callback-exception handler (which prints
@@ -196,14 +249,20 @@ class App:
 
         def done(ok):
             self.conn_var.set("CONNECTED" if ok else "not responding")
-            # NOT fill=GOOD if ok else BAD -- GOOD and BAD both alias RED since
-            # the red/black/white rebrand (ui_theme.py), so that pairing always
-            # rendered the same color regardless of connection state, silently
-            # defeating the dot's whole purpose. FG (white) reads as "nominal"
-            # the same way it already does on the status bar text just below;
             # MUTED (this dot's own initial color, before the first poll
             # completes) stays the third, distinct "checking..." state.
-            self.conn_dot.itemconfigure(self._conn_dot_id, fill=FG if ok else BAD)
+            self.conn_dot.itemconfigure(self._conn_dot_id, fill=GOOD if ok else BAD)
+            if ok and not self._first_ok:
+                # Don't fire these four tabs' refresh RPCs at startup (they'd
+                # queue up behind each other on bridge_client's one-request-at-
+                # a-time lock before this first successful ping even lands --
+                # ~65s of "not responding" with the game closed). Run them
+                # once, right when the game is actually confirmed reachable.
+                self._first_ok = True
+                self.host_tab._refresh_weather_list()
+                self.host_tab._refresh_state()
+                self.loadout_tab._refresh_currency()
+                self.speed_tab._refresh_current()
             self.root.after(5000, self._poll_connection)
 
         self.runner.run(work, done, lambda e: self.root.after(5000, self._poll_connection))
@@ -227,7 +286,7 @@ class App:
 
 
 # Arbitrary fixed local port used purely as a single-instance lock -- binding
-# it is the mutex. See docs/DOCUMENTATION.md §5.6 for what breaks without it.
+# it is the mutex. See docs/INTERNALS.md §5.6 for what breaks without it.
 _SINGLE_INSTANCE_PORT = 47821
 
 
@@ -254,4 +313,18 @@ if __name__ == "__main__":
             "or press Insert). This copy will now close instead of opening a second, "
             "conflicting instance.")
         sys.exit(0)
+
+    try:
+        api.load_config()
+    except Exception as e:
+        logging.exception("Failed to load config")
+        _root = tk.Tk()
+        _root.withdraw()
+        messagebox.showerror(
+            "Config error",
+            f"Couldn't load a config file in {api._CONFIG_DIR}:\n\n{e}\n\n"
+            "Fix or delete the bad file (a hand-edited families.json/maps.json/"
+            "gamemodes.json is the usual culprit) and restart the overlay.")
+        sys.exit(1)
+
     App().run()

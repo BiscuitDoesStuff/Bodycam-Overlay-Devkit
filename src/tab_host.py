@@ -4,8 +4,8 @@ from tkinter import ttk, messagebox
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import PANEL, FG, MUTED, BAD, PAD, PAD_SM
-from ui_common import _load_ui_state, _save_ui_state, _make_scrollable, _FILTER_DEBOUNCE_MS
+from ui_theme import PANEL, FG, MUTED, BAD, PAD, PAD_SM, PAD_MD, PAD_XS
+from ui_common import load_ui_state, save_ui_state, make_scrollable, FILTER_DEBOUNCE_MS, set_text
 
 
 class HostTab(ttk.Frame):
@@ -34,16 +34,18 @@ class HostTab(ttk.Frame):
         right_outer = ui.frame(self, panel=True, width=270)
         right_outer.pack(side="right", fill="y", padx=(0, PAD), pady=PAD)
         right_outer.pack_propagate(False)
-        right = _make_scrollable(right_outer, panel=True)
+        right = make_scrollable(right_outer, panel=True)
 
         ui.label(left, text="Map", bold=True).pack(anchor="w")
 
         filter_row = ui.frame(left)
         filter_row.pack(fill="x", pady=(PAD_SM, PAD_SM))
-        ui.label(filter_row, text="\U0001F50D", muted=True).pack(side="left")
+        # Plain text, not the U+1F50D magnifying-glass emoji -- that's outside
+        # the Basic Multilingual Plane and renders as a box on Tk 8.6.
+        ui.label(filter_row, text="Filter:", muted=True).pack(side="left")
         self.map_filter_var = tk.StringVar()
         filter_entry = ui.entry(filter_row, textvariable=self.map_filter_var)
-        filter_entry.pack(side="left", fill="x", expand=True, padx=(PAD_SM - 2, 0))
+        filter_entry.pack(side="left", fill="x", expand=True, padx=(PAD_XS, 0))
         filter_entry.bind("<KeyRelease>", self._on_map_filter_keyrelease)
 
         map_frame = ui.frame(left)
@@ -62,7 +64,7 @@ class HostTab(ttk.Frame):
 
         self.map_note_var = tk.StringVar()
         ui.label(left, textvariable=self.map_note_var, muted=True, wraplength=400,
-                 justify="left").pack(anchor="w", fill="x", pady=(PAD_SM - 2, 0))
+                 justify="left").pack(anchor="w", fill="x", pady=(PAD_XS, 0))
 
         ui.label(left, text="Gamemode", bold=True).pack(anchor="w", pady=(PAD, 0))
         gm_frame = ui.frame(left)
@@ -83,7 +85,7 @@ class HostTab(ttk.Frame):
 
         self.gamemode_note_var = tk.StringVar()
         ui.label(left, textvariable=self.gamemode_note_var, muted=True, wraplength=400,
-                 justify="left").pack(anchor="w", fill="x", pady=(PAD_SM - 2, 0))
+                 justify="left").pack(anchor="w", fill="x", pady=(PAD_XS, 0))
 
         row = ui.frame(left)
         row.pack(fill="x", pady=(PAD, 0))
@@ -91,24 +93,29 @@ class HostTab(ttk.Frame):
         ui.label(row, text="Cap").grid(row=0, column=0, sticky="w")
         self.cap_var = tk.IntVar(value=7)
         ui.spinbox(row, from_=1, to=64, textvariable=self.cap_var, width=6).grid(
-            row=0, column=1, sticky="w", padx=PAD_SM + 2)
+            row=0, column=1, sticky="w", padx=PAD_MD)
 
-        ui.label(row, text="Team Cap").grid(row=1, column=0, sticky="w", pady=(PAD_SM + 2, 0))
+        ui.label(row, text="Team Cap").grid(row=1, column=0, sticky="w", pady=(PAD_MD, 0))
         self.team_var = tk.IntVar(value=1)
         self.team_spin = ui.spinbox(row, from_=1, to=32, textvariable=self.team_var, width=6)
-        self.team_spin.grid(row=1, column=1, sticky="w", padx=PAD_SM + 2, pady=(PAD_SM + 2, 0))
+        self.team_spin.grid(row=1, column=1, sticky="w", padx=PAD_MD, pady=(PAD_MD, 0))
 
         self.private_var = tk.BooleanVar(value=False)
         ui.checkbutton(row, text="Private", variable=self.private_var).grid(
-            row=2, column=0, sticky="w", pady=(PAD_SM + 2, 0))
+            row=2, column=0, sticky="w", pady=(PAD_MD, 0))
         self.bots_var = tk.BooleanVar(value=True)
         ui.checkbutton(row, text="Bots", variable=self.bots_var).grid(
-            row=2, column=1, sticky="w", pady=(PAD_SM + 2, 0))
+            row=2, column=1, sticky="w", pady=(PAD_MD, 0))
 
         row.columnconfigure(1, weight=1)
 
         ui.button(left, "Load Custom Match", kind="accent", command=self._load_match).pack(
             fill="x", pady=(PAD + 2, 0))
+        # Persistent, not just a status-bar mention -- the status bar gets
+        # overwritten by the very next thing that happens (a poll tick, any
+        # other button), which would make the password unrecoverable.
+        self.session_password_lbl = ui.label(left, text="", muted=True)
+        self.session_password_lbl.pack(anchor="w", pady=(PAD_SM, 0))
 
         # right column: cycle + live state
         ui.label(right, text="Live State", bg=PANEL, bold=True).pack(anchor="w", padx=PAD, pady=(PAD, 0))
@@ -118,7 +125,7 @@ class HostTab(ttk.Frame):
         ui.button(right, "Refresh State", command=self._refresh_state).pack(fill="x", padx=PAD)
         ui.button(right, "Reload Maps/Modes (from disk)", command=self._reload_config).pack(
             fill="x", padx=PAD, pady=(PAD_SM, 0))
-        ui.button(right, "↻  Cycle Current Match", kind="good", command=self._cycle).pack(
+        ui.button(right, "↻  Cycle Current Match", kind="accent", command=self._cycle).pack(
             fill="x", padx=PAD, pady=(PAD, 0))
         ui.button(right, "Force Round End", command=self._force_end).pack(
             fill="x", padx=PAD, pady=(PAD, PAD))
@@ -207,9 +214,10 @@ class HostTab(ttk.Frame):
 
         self._populate_map_tree()
         self._populate_gamemode_tree()
-        self._refresh_weather_list()
         self._apply_saved_state()
-        self._refresh_state()
+        # _refresh_weather_list()/_refresh_state() are game RPCs -- deferred to
+        # App._poll_connection's first successful ping, not fired here (see its
+        # comment: avoids a startup pile-up on bridge_client's request lock).
 
     def _populate_map_tree(self, filter_text=""):
         """Rebuilds the map tree under three real category rows (Playlist /
@@ -242,15 +250,16 @@ class HostTab(ttk.Frame):
         for n in dev:
             self.map_tree.insert(self.CAT_DEV, "end", iid=n, text=n, tags=("map",))
 
-        self.map_tree.insert("", "end", iid=self.CAT_UNCONFIRMED_MAP, open=True, tags=("category",),
-                              text=f"UNCONFIRMED MAPS (guessed paths)  ({len(unconfirmed)})")
-        for n in unconfirmed:
-            self.map_tree.insert(self.CAT_UNCONFIRMED_MAP, "end", iid=n, text=n, tags=("map_unconfirmed",))
+        if unconfirmed:
+            self.map_tree.insert("", "end", iid=self.CAT_UNCONFIRMED_MAP, open=True, tags=("category",),
+                                  text=f"UNCONFIRMED MAPS (guessed paths)  ({len(unconfirmed)})")
+            for n in unconfirmed:
+                self.map_tree.insert(self.CAT_UNCONFIRMED_MAP, "end", iid=n, text=n, tags=("map_unconfirmed",))
 
     def _on_map_filter_keyrelease(self, _evt=None):
         if self._map_filter_after_id is not None:
             self.after_cancel(self._map_filter_after_id)
-        self._map_filter_after_id = self.after(_FILTER_DEBOUNCE_MS, self._apply_map_filter)
+        self._map_filter_after_id = self.after(FILTER_DEBOUNCE_MS, self._apply_map_filter)
 
     def _apply_map_filter(self):
         self._map_filter_after_id = None
@@ -363,8 +372,8 @@ class HostTab(ttk.Frame):
         """Restores the last map/gamemode/cap/team/private/bots this tab was
         used with, so relaunching the overlay doesn't reset every field back
         to defaults. Written by _load_match() on every successful load; see
-        _load_ui_state()/_save_ui_state() near the top of this file."""
-        state = _load_ui_state()
+        load_ui_state()/save_ui_state() near the top of this file."""
+        state = load_ui_state()
         mode = state.get("gamemode")
         if not (mode and self._select_gamemode(mode)):
             # nothing saved (or it's gone from gamemodes.json) -- fall back to
@@ -501,8 +510,10 @@ class HostTab(ttk.Frame):
 
         def done(result):
             self.last_hosted = dict(map_path=map_path, private=private, bots=bots)
-            _save_ui_state({"map": name, "gamemode": mode_name, "cap": cap,
+            save_ui_state({"map": name, "gamemode": mode_name, "cap": cap,
                              "team": team or 1, "private": private, "bots": bots})
+            self.session_password_lbl.configure(
+                text=f"Session password: {api.SESSION_PASSWORD}" if private else "")
             self.app.status(f"Loaded {name}: {result}")
 
         self._guard_then_run(
@@ -515,14 +526,12 @@ class HostTab(ttk.Frame):
             return api.get_live_state()
 
         def done(state):
-            self.state_box.configure(state="normal")
-            self.state_box.delete("1.0", tk.END)
             if not state.get("in_match"):
-                self.state_box.insert(tk.END, "Not in a match\n(in Lobby / menu)")
+                body = "Not in a match\n(in Lobby / menu)"
             else:
-                for k in ("mode_name", "phase", "count", "max", "team_size"):
-                    self.state_box.insert(tk.END, f"{k}: {state.get(k)}\n")
-            self.state_box.configure(state="disabled")
+                body = "".join(f"{k}: {state.get(k)}\n" for k in
+                                ("mode_name", "phase", "count", "max", "team_size"))
+            set_text(self.state_box, body)
 
         self.app.runner.run(work, done, self.app.on_error("state check failed"))
 
@@ -549,14 +558,11 @@ class HostTab(ttk.Frame):
             return api.get_match_info()
 
         def done(info):
-            self.match_info_box.configure(state="normal")
-            self.match_info_box.delete("1.0", tk.END)
             if info is None:
-                self.match_info_box.insert(tk.END, "Not in a match\n(in Lobby / menu)")
+                body = "Not in a match\n(in Lobby / menu)"
             else:
-                for k, v in info.items():
-                    self.match_info_box.insert(tk.END, f"{k}: {v}\n")
-            self.match_info_box.configure(state="disabled")
+                body = "".join(f"{k}: {v}\n" for k, v in info.items())
+            set_text(self.match_info_box, body)
 
         self.app.runner.run(work, done, self.app.on_error("match info check failed"))
 

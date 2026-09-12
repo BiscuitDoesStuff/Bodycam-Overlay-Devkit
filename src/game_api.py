@@ -3,16 +3,22 @@ gvas2 (Loadout.sav file editing) behind clean functions.
 
 Design rule: individual items (skins, operators, maps found on disk) are always
 pulled live/fresh; only the family->category mapping in families.json is
-hand-maintained (see docs/DOCUMENTATION.md section 5.3 for why). Rationale for
-the trickier live-game hacks below (bot fill, explosive bullets, cap/travel
-ordering, cycle_match's map-name matching) is centralized in that same file,
+hand-maintained (see docs/INTERNALS.md section 5.3 for why). Rationale for
+the trickier live-game hacks below (bot fill, cap/travel ordering,
+cycle_match's map-name matching) is centralized in that same file,
 section 5.5, rather than repeated per function.
 """
+import copy
+import filecmp
 import json
+import logging
 import os
 import re
+import secrets
 import shutil
 import sys
+import time
+from pathlib import Path
 
 import bridge_client as bc
 import gvas2
@@ -23,29 +29,34 @@ import gvas2
 _HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 SAVE_PATH = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Bodycam", "Saved", "SaveGames", "Loadout.sav")
 
-_GAME_ROOT_CANDIDATES = [
-    r"C:\Program Files (x86)\Steam\steamapps\common\Bodycam",
-    r"C:\Program Files\Steam\steamapps\common\Bodycam",
-]
+# host_and_travel()'s private-match session password -- generated once per
+# process instead of a fixed string every clone of this app shared, so a
+# private match actually needs the host to hand out this run's password.
+SESSION_PASSWORD = secrets.token_hex(4)
 
 # families.json / maps.json / gamemodes.json are meant to be hand-editable
 # (see README) -- that only works if edits survive a restart, which _HERE
 # alone can't guarantee in a packaged exe. Seed a persistent copy in AppData
-# on first run, then always read/write THAT copy; the bundled files under
-# _HERE are just the initial defaults, never touched again after seeding.
+# on first run (see load_config() below), then always read/write THAT copy;
+# the bundled files under _HERE are just the initial defaults.
+# Just a path -- no I/O here. Seeding/directory-creation happens in
+# load_config(), called explicitly by overlay_app.py after logging is set up,
+# so a corrupt hand-edited JSON gets a real error dialog instead of silently
+# killing a --windowed exe at import time.
 _CONFIG_DIR = os.path.join(os.environ.get("LOCALAPPDATA", _HERE), "BodycamOverlay")
-os.makedirs(_CONFIG_DIR, exist_ok=True)
-for _cfg_name in ("families.json", "maps.json", "gamemodes.json", "item_catalog.json"):
-    _dest = os.path.join(_CONFIG_DIR, _cfg_name)
-    if not os.path.exists(_dest):
-        shutil.copy2(os.path.join(_HERE, _cfg_name), _dest)
 
 
 def _load_json(name):
     """Loads a config file, dropping any "_..." documentation keys (see
-    families.json's own "_comment")."""
-    with open(os.path.join(_CONFIG_DIR, name), encoding="utf-8") as f:
-        return {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+    families.json's own "_comment"). Re-raises with the filename attached --
+    json.JSONDecodeError's own message doesn't name the file, which matters
+    here since the caller shows it in an error dialog naming "the bad file"."""
+    path = os.path.join(_CONFIG_DIR, name)
+    try:
+        with open(path, encoding="utf-8") as f:
+            return {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+    except (OSError, ValueError) as e:
+        raise RuntimeError(f"{path}: {e}") from e
 
 
 FAMILIES, MAPS, GAMEMODES = {}, {}, {}
@@ -62,7 +73,10 @@ ITEM_CATEGORIES = {}
 
 
 def _reload_item_catalog():
-    data = _load_json("item_catalog.json")
+    # Extracted data, never hand-edited -- read straight from the bundled
+    # copy under _HERE, not seeded into _CONFIG_DIR like the other three.
+    with open(os.path.join(_HERE, "item_catalog.json"), encoding="utf-8") as f:
+        data = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
     ITEM_CATEGORIES.clear()
     ITEM_CATEGORIES.update(data.get("categories", {}))
 
@@ -77,7 +91,46 @@ def reload_configs():
     _reload_item_catalog()
 
 
-reload_configs()
+def load_config():
+    """Seeds families/maps/gamemodes.json into _CONFIG_DIR (first run), then
+    loads everything into FAMILIES/MAPS/GAMEMODES/ITEM_CATEGORIES. Called once
+    by overlay_app.py at startup, after logging is configured -- if a
+    hand-edited JSON is corrupt, json.load raises here and the caller can show
+    a real error dialog instead of the import silently killing the exe.
+
+    Re-seeding: a `.seed` file alongside each config is a copy of what _HERE's
+    bundled default looked like the last time it was seeded. Re-seeding only
+    happens when that bundled default has since changed (bundled != .seed) --
+    a merely-corrupt or hand-edited dest is deliberately left alone otherwise,
+    so json.load() below still raises on it instead of this silently "fixing"
+    it. When the bundled default DID change, dest is only overwritten as-is if
+    it still matches the old .seed (untouched by the user); otherwise it's
+    renamed to `.bak` and logged first, never silently discarded."""
+    os.makedirs(_CONFIG_DIR, exist_ok=True)
+    for _cfg_name in ("families.json", "maps.json", "gamemodes.json"):
+        _bundled = os.path.join(_HERE, _cfg_name)
+        _dest = os.path.join(_CONFIG_DIR, _cfg_name)
+        _seed = _dest + ".seed"
+        if not os.path.exists(_dest):
+            shutil.copy2(_bundled, _dest)
+            shutil.copy2(_bundled, _seed)
+        elif not os.path.exists(_seed):
+            # Migrating from before the .seed mechanism existed -- seed from
+            # the CURRENT bundled default (not the user's dest!), so a future
+            # bundled change correctly treats any difference from THIS point
+            # on as a real divergence to back up, instead of baselining on
+            # whatever hand edits the user's dest might already carry.
+            shutil.copy2(_bundled, _seed)
+        elif not filecmp.cmp(_bundled, _seed, shallow=False):
+            if filecmp.cmp(_dest, _seed, shallow=False):
+                shutil.copy2(_bundled, _dest)  # untouched by the user -- safe to update
+            else:
+                _bak = _dest + ".bak"
+                shutil.copy2(_dest, _bak)
+                shutil.copy2(_bundled, _dest)
+                logging.info(f"{_cfg_name} changed upstream and your copy had diverged -- backed up to {_bak}")
+            shutil.copy2(_bundled, _seed)
+    reload_configs()
 
 
 # --------------------------------------------------------------------------- connectivity
@@ -90,6 +143,29 @@ def run_raw_lua(code, timeout=20.0):
     """For the Console tab: run arbitrary Lua on the game thread, full output
     (print() lines + the '-- return:' marker, if any) returned untouched."""
     return bc.run_lua_raw(code, timeout=timeout)
+
+
+def _call_ok(lua, timeout=15):
+    """Runs a Lua payload shaped `return ok and 'OK' or ('ERR: ' .. tostring(err))`
+    (the shared pattern every simple fire-and-forget cheat/action call below
+    uses), raising RuntimeError with the ERR detail if it wasn't OK."""
+    result = bc.run_lua(lua, timeout=timeout).strip()
+    if result != "OK":
+        raise RuntimeError(result)
+
+
+def _datatable_rows(asset_path, timeout):
+    """Every row name in a DataTable asset, live. Shared by get_operators()
+    and _get_shop_items() -- same Lua shape, only the asset path/timeout/
+    cache differ."""
+    return bc.run_lua(
+        f"local dt=StaticFindObject({asset_path!r})\n"
+        "local rows=dt:GetRowNames()\n"
+        "local out={}\n"
+        "for _,rn in ipairs(rows) do out[#out+1]=tostring(rn) end\n"
+        "return table.concat(out, '\\n')",
+        timeout=timeout,
+    )
 
 
 # --------------------------------------------------------------------------- saved console snippets
@@ -199,7 +275,7 @@ def list_plugins():
 def preview_plugin(source_path):
     """Reads and validates a plugin file WITHOUT installing it (no copy into
     _PLUGINS_DIR) -- lets the UI show what a plugin's buttons will actually
-    run before the user commits to adding it (docs/DOCUMENTATION.md §3.7).
+    run before the user commits to adding it (docs/DOCUMENTATION.md §4.7).
     Returns (plugin_name, raw_data)."""
     with open(source_path, encoding="utf-8") as f:
         data = json.load(f)
@@ -235,14 +311,8 @@ _cache = {"operators": None, "shop_items": None}
 def get_operators(force=False):
     """All operator skin row names, live from DT_OperatorSkins."""
     if _cache["operators"] is None or force:
-        body = bc.run_lua(
-            "local dt=StaticFindObject('/Game/BodycamCore/ItemsDefinition/Skins/DT_OperatorSkins.DT_OperatorSkins')\n"
-            "local rows=dt:GetRowNames()\n"
-            "local out={}\n"
-            "for _,rn in ipairs(rows) do out[#out+1]=tostring(rn) end\n"
-            "return table.concat(out, '\\n')",
-            timeout=20,
-        )
+        body = _datatable_rows(
+            "/Game/BodycamCore/ItemsDefinition/Skins/DT_OperatorSkins.DT_OperatorSkins", timeout=20)
         _cache["operators"] = sorted(l.strip() for l in body.splitlines() if l.strip())
     return list(_cache["operators"])
 
@@ -250,14 +320,8 @@ def get_operators(force=False):
 def _get_shop_items(force=False):
     """Every row name in DT_NewShopItem, live. Cached -- this table is large (700+ rows)."""
     if _cache["shop_items"] is None or force:
-        body = bc.run_lua(
-            "local dt=StaticFindObject('/Game/BodycamCore/ItemsDefinition/DT_NewShopItem.DT_NewShopItem')\n"
-            "local rows=dt:GetRowNames()\n"
-            "local out={}\n"
-            "for _,rn in ipairs(rows) do out[#out+1]=tostring(rn) end\n"
-            "return table.concat(out, '\\n')",
-            timeout=30,
-        )
+        body = _datatable_rows(
+            "/Game/BodycamCore/ItemsDefinition/DT_NewShopItem.DT_NewShopItem", timeout=30)
         _cache["shop_items"] = [l.strip() for l in body.splitlines() if l.strip()]
     return _cache["shop_items"]
 
@@ -354,11 +418,10 @@ def list_gamemodes():
 def get_live_state(timeout=15):
     """Returns dict: connected, map_gamemode_class, mode_name, phase, count, max, team_size."""
     lua = r"""
-local function vld(o) if o==nil then return false end local ok,v=pcall(function() return o:IsValid() end) return ok and v==true end
 local function isreal(v) return v ~= nil and not tostring(v):find("^TrivialObject") end
-local gm = (FindAllOf('GameModeBase') or {})[1]
-local gs = (FindAllOf('GameStateBase') or {})[1]
-if not vld(gm) or not vld(gs) then return 'NOMATCH' end
+local gm = gm()
+local gs = gs()
+if not valid(gm) or not valid(gs) then return 'NOMATCH' end
 local cls = '?'; pcall(function() cls = gm:GetClass():GetFName():ToString() end)
 local ph = '?'; pcall(function() ph = gs.CurrentPhase.TagName:ToString() end)
 local n = -1; pcall(function() n = gs:GetNumPlayersAndBot() end)
@@ -446,7 +509,7 @@ end
 
 def force_round_end(timeout=15):
     lua = r"""
-local gs = (FindAllOf('GameStateBase') or {})[1]
+local gs = gs()
 if not gs then return 'no gamestate' end
 local ok = pcall(function() gs:OverrideScoreLimit(2) end)
 return tostring(ok)
@@ -512,7 +575,7 @@ local function safe_plain(fn)
     if ok and v ~= nil then return tostring(v) end
     return 'n/a'
 end
-local gm = (FindAllOf('GameModeBase') or {})[1]
+local gm = gm()
 if not gm then return 'NOMATCH' end
 local out = {}
 out[#out+1] = 'started=' .. safe_plain(function() return gm:HasMatchStarted() end)
@@ -598,7 +661,7 @@ def get_lobby_roster(timeout=15):
     players, and correct the flattening assumption above if the real shape
     turns out to be different."""
     lua = _PC_FIELDS_LUA_HELPER + r"""
-local gm = (FindAllOf('GameModeBase') or {})[1]
+local gm = gm()
 if not gm then return 'NOGM' end
 local out = {}
 pcall(function()
@@ -673,7 +736,7 @@ for _, w in ipairs(FindAllOf('UDS_Weather_Settings_C') or {{}}) do
     if ok and wname == {name!r} then target = w break end
 end
 if not target then return 'NOTFOUND' end
-local gs = (FindAllOf('GameStateBase') or {{}})[1]
+local gs = gs()
 if not gs then return 'NOGS' end
 local ok, err = pcall(function()
     gs.WeatherManagerComponent:StartWeatherTransition(target, {float(transition_seconds)})
@@ -691,20 +754,39 @@ return ok and 'OK' or ('ERR: ' .. tostring(err))
 
 # --------------------------------------------------------------------------- CheatManager (BP_BodycamCheatManager, found via the UE4SS SDK dump, 2026-09-07)
 # The game ships its own developer cheat menu, reachable the same way
-# SpeedTab's Slomo already reaches it: `pc.CheatManager:SomeFunction()`. All
+# set_slomo() below reaches it: `pc().CheatManager:SomeFunction()`. All
 # of the functions wrapped below were confirmed live (2026-09-07, solo, from
 # the Lobby) to call successfully with no error and no crash -- see each
 # function's own docstring for exactly what was independently observed
 # versus just "the call didn't error."
-def _cheat(fn_name, timeout=15):
-    lua = f"""
-local pc = UEHelpers.GetPlayerController()
-local ok, err = pcall(function() pc.CheatManager:{fn_name}() end)
+def _cheat_manager_call(call_expr, timeout=15):
+    """Runs `pc().CheatManager:<call_expr>` -- call_expr is the full method
+    call including its own args, e.g. "CheatKillMyself()" or "Slomo(0.5)"."""
+    _call_ok(f"""
+local ok, err = pcall(function() pc().CheatManager:{call_expr} end)
 return ok and 'OK' or ('ERR: ' .. tostring(err))
+""", timeout)
+
+
+def _cheat(fn_name, timeout=15):
+    _cheat_manager_call(f"{fn_name}()", timeout)
+
+
+def set_slomo(value, timeout=15):
+    """CheatManager:Slomo(value) -- sets the game's global time dilation
+    (SpeedTab's presets/custom value)."""
+    _cheat_manager_call(f"Slomo({float(value)})", timeout)
+
+
+def get_time_dilation(timeout=15):
+    """Reads WorldSettings.TimeDilation live -- what SpeedTab's "Current
+    TimeDilation" label shows after a slomo change."""
+    lua = r"""
+local ws = (FindAllOf('WorldSettings') or {})[1]
+local td = '?'; pcall(function() td = tostring(ws.TimeDilation) end)
+return td
 """
-    result = bc.run_lua(lua, timeout=timeout).strip()
-    if result != "OK":
-        raise RuntimeError(result)
+    return bc.run_lua(lua, timeout=timeout).strip()
 
 
 def kill_self(timeout=15):
@@ -726,14 +808,7 @@ def set_game_timer(seconds, timeout=15):
     Confirmed live the call succeeds; its real effect was observed
     indirectly (see end_round()'s docstring -- called together with this in
     the same test) rather than watched in isolation for this specific call."""
-    lua = f"""
-local pc = UEHelpers.GetPlayerController()
-local ok, err = pcall(function() pc.CheatManager:CheatSetGameTimer({float(seconds)}) end)
-return ok and 'OK' or ('ERR: ' .. tostring(err))
-"""
-    result = bc.run_lua(lua, timeout=timeout).strip()
-    if result != "OK":
-        raise RuntimeError(result)
+    _cheat_manager_call(f"CheatSetGameTimer({float(seconds)})", timeout)
 
 
 def end_round(timeout=15):
@@ -761,17 +836,9 @@ def set_invincible(timeout=15):
     have NO actual effect -- taking damage afterward was not prevented.
     Kept here (not removed) since it's still a harmless, error-free call,
     but do not expect it to do anything. `UCheatManager:God()` (the plain
-    Unreal Engine base-class cheat, not Bodycam-specific) was also tried,
-    with continuous health polling through the fall triggered by the
-    now-removed `CheatTeleportAbove` cheat (confirmed live 2026-09-09,
-    see dev/RESEARCH_NOTES.md for the full investigation) -- health
-    dropped to -498 and the pawn's identity changed (a real
-    death+respawn) on the exact same timeline as with no God() call at
-    all. Confirmed NOT to prevent that death path. The fixed ~-500 value
-    (not a gradual/proportional drop) suggests a direct instant-kill/
-    out-of-bounds check rather than normal TakeDamage(), which would
-    explain why neither cheat's invincibility
-    has any effect on it."""
+    Unreal Engine base-class cheat, not Bodycam-specific) was also tried
+    and confirmed NOT to prevent death from the now-removed
+    `CheatTeleportAbove` cheat's fall (see docs/INTERNALS.md)."""
     _cheat("CheatSetInvincible", timeout)
 
 
@@ -807,14 +874,11 @@ def disable_perk_cooldown(timeout=15):
     an "Auto-Clear" checkbox that periodically re-calls this on a timer to
     work around exactly that limitation, since manually re-clicking after
     every single redeploy isn't practical."""
-    lua = r"""
-local pc = UEHelpers.GetPlayerController()
-local ok, err = pcall(function() pc['Server - CheatDisablePerkCooldown'](pc) end)
+    _call_ok(r"""
+local p = pc()
+local ok, err = pcall(function() p['Server - CheatDisablePerkCooldown'](p) end)
 return ok and 'OK' or ('ERR: ' .. tostring(err))
-"""
-    result = bc.run_lua(lua, timeout=timeout).strip()
-    if result != "OK":
-        raise RuntimeError(result)
+""", timeout)
 
 
 # Candidate class paths for gamemodes DT_GamemodeInfo/DT_GameModeData list
@@ -849,7 +913,7 @@ def discover_extra_gamemodes(timeout=25):
     blind even against a wrong guess) then confirms with StaticFindObject.
     Returns {mode_name: class_path_or_None}. A hit still needs manually
     sanity-checking (team_based / default cap / team size) before trusting it
-    in a real match -- see docs/DOCUMENTATION.md §5.3 for the gamemodes.json
+    in a real match -- see docs/INTERNALS.md §5.3 for the gamemodes.json
     format add_gamemode() below writes into."""
     found = {}
     for mode_name, paths in _GAMEMODE_CANDIDATES.items():
@@ -876,7 +940,7 @@ def add_gamemode(name, class_path, team_based=False, default_cap=8, default_team
                   status="untested", note=""):
     """Appends a new entry to the persisted gamemodes.json (the copy in
     _CONFIG_DIR seeded on first run, not the bundled default -- see
-    reload_configs()/docs/DOCUMENTATION.md §5.3) and reloads GAMEMODES in
+    reload_configs()/docs/INTERNALS.md §5.3) and reloads GAMEMODES in
     place. Used by the Host tab's 'Discover More Gamemodes...' so a confirmed
     class path can be added without hand-editing the file first.
 
@@ -903,13 +967,13 @@ def add_gamemode(name, class_path, team_based=False, default_cap=8, default_team
 
 def write_cap(cap, team_size=None, bots=None, timeout=15):
     """Writes MaxPlayers (and optionally TeamMaxSize, HMS_bBotsMethod) only if
-    not in StartRound (see docs/DOCUMENTATION.md §5.5). Returns a status string;
+    not in StartRound (see docs/INTERNALS.md §5.5). Returns a status string;
     caller should check for 'ABORT' and retry."""
     ts_line = f"pcall(function() gm.ConfigDataAsset.TeamConfig.TeamMaxSize={team_size} end)" if team_size is not None else ""
     bots_line = f"pcall(function() gm.HMS_bBotsMethod={str(bool(bots)).lower()} end)" if bots is not None else ""
     lua = f"""
-local gm = (FindAllOf('GameModeBase') or {{}})[1]
-local gs = (FindAllOf('GameStateBase') or {{}})[1]
+local gm = gm()
+local gs = gs()
 if not gm or not gs then return 'no match loaded' end
 local ph = '?'; pcall(function() ph = gs.CurrentPhase.TagName:ToString() end)
 if ph:find('StartRound') then return 'ABORT: ' .. ph end
@@ -927,7 +991,6 @@ return 'WROTE phase=' .. ph .. ' ShouldSpawnBots=' .. sb
 
 
 def write_cap_retrying(cap, team_size=None, bots=None, attempts=8, delay=2.0, timeout=15):
-    import time
     for i in range(attempts):
         result = write_cap(cap, team_size=team_size, bots=bots, timeout=timeout)
         if "WROTE" in result:
@@ -939,29 +1002,36 @@ def write_cap_retrying(cap, team_size=None, bots=None, attempts=8, delay=2.0, ti
 def spawn_bots_to_target(target_count, timeout=15):
     """Manually fills to target_count via GameMode:SpawnBot(), one per 4s,
     bypassing ShouldSpawnBots()/HMS_bBotsMethod entirely -- see
-    docs/DOCUMENTATION.md §5.5 for why. Generation-guarded: calling this again
+    docs/INTERNALS.md §5.5 for why. Generation-guarded: calling this again
     supersedes any fill already in progress rather than stacking a second
     timer."""
     lua = f"""
-local function vld(o) if o==nil then return false end local ok,v=pcall(function() return o:IsValid() end) return ok and v==true end
-local gm = (FindAllOf('GameModeBase') or {{}})[1]
-local gs = (FindAllOf('GameStateBase') or {{}})[1]
-if not vld(gm) or not vld(gs) then return 'no match loaded' end
+-- Alias the injected gm/gs/valid FUNCTIONS to locals of the same name (not
+-- an instance -- `local gm, gs, valid = gm, gs, valid` captures the RHS
+-- using the enclosing/global scope before the locals take effect, same as
+-- `local pc = pc()` elsewhere). step() below runs on its own timer, possibly
+-- long after this request returns; aliasing here means it keeps calling the
+-- REAL gm()/gs()/valid() every tick even if some other Lua that runs in
+-- between (a Console command, a plugin) reassigns the bare global names --
+-- while still fetching a FRESH live instance on every call, not one
+-- captured once up front.
+local gm, gs, valid = gm, gs, valid
+if not valid(gm()) or not valid(gs()) then return 'no match loaded' end
 _G.BOTFILL = _G.BOTFILL or {{}}
 _G.BOTFILL.gen = (_G.BOTFILL.gen or 0) + 1
 local MYGEN = _G.BOTFILL.gen
 local TARGET = {target_count}
 local function step()
     if _G.BOTFILL.gen ~= MYGEN then return end
-    local gm2 = (FindAllOf('GameModeBase') or {{}})[1]
-    local gs2 = (FindAllOf('GameStateBase') or {{}})[1]
-    if not vld(gm2) or not vld(gs2) then return end
+    local gm2 = gm()
+    local gs2 = gs()
+    if not valid(gm2) or not valid(gs2) then return end
     local n = 0; pcall(function() n = gs2:GetNumPlayersAndBot() end)
     if n >= TARGET then return end
     local b; pcall(function() b = gm2:SpawnBot() end)
-    if vld(b) then
+    if valid(b) then
         ExecuteWithDelay(2500, function() ExecuteInGameThread(function()
-            pcall(function() if not vld(b.Pawn) then gm2:RestartPlayer(b) end end)
+            pcall(function() if not valid(b.Pawn) then gm2:RestartPlayer(b) end end)
         end) end)
     end
     ExecuteWithDelay(4000, function() ExecuteInGameThread(step) end)
@@ -982,18 +1052,17 @@ def host_and_travel(map_path, gamemode_class, cap, team_size, private, bots, ses
     """Full flow: end current round if in one (wait for it to settle), travel to
     map+mode, then write cap/team AFTER the new mode has loaded -- each gamemode
     has its own persistent cap asset, so writing it only makes sense once the
-    target mode's GameMode instance actually exists (see docs/DOCUMENTATION.md
+    target mode's GameMode instance actually exists (see docs/INTERNALS.md
     §5.5). private=True sets both UpdateLobbyAccessMethod(true) and a session
     password as a second layer; bots=True bypasses HMS_bBotsMethod entirely and
     spawns manually via spawn_bots_to_target() (same section explains why).
     """
-    import time
     state = get_live_state(timeout=timeout)
     if state.get("in_match"):
         force_round_end(timeout=timeout)
         time.sleep(15)  # let the phase actually settle before ending/traveling
 
-    password = "ClaudeOverlay" if private else ""
+    password = SESSION_PASSWORD if private else ""
     lua = f"""
 local gi = UEHelpers.GetGameInstance()
 pcall(function() gi['HostAlone?'] = false end)
@@ -1005,8 +1074,7 @@ pcall(function() gi['HMS_ExpectedPlayerCount'] = {cap} end)
 pcall(function() gi:UpdateLobbyAccessMethod({str(bool(private)).lower()}) end)
 local KSL = StaticFindObject('/Script/Engine.Default__KismetSystemLibrary')
 local w = UEHelpers.GetWorld()
-local pc = UEHelpers.GetPlayerController()
-local ok = pcall(function() KSL:ExecuteConsoleCommand(w, 'servertravel {map_path}?game={gamemode_class}', pc) end)
+local ok = pcall(function() KSL:ExecuteConsoleCommand(w, 'servertravel {map_path}?game={gamemode_class}', pc()) end)
 if {str(not private).lower()} then pcall(function() gi.HMS_AdvertiseSession(gi) end) end
 return 'travel issued ok=' .. tostring(ok)
 """
@@ -1060,7 +1128,7 @@ def cycle_match(fallback_map_path=None, private=False, bots=True, timeout=20):
     map_path = None
     if level_name:
         # Mode rotation uses per-mode-prefixed level names, not maps.json's bare
-        # package name -- strip a known prefix before comparing (docs/DOCUMENTATION.md §5.5).
+        # package name -- strip a known prefix before comparing (docs/INTERNALS.md §5.5).
         bare = level_name
         for prefix in ("DM_", "TDM_", "GG_", "HP_", "BB_", "VS_", "WM_"):
             if bare.startswith(prefix):
@@ -1111,10 +1179,6 @@ def dump_loadout(idx):
     }
 
 
-def dump_all_loadouts():
-    return [dump_loadout(i) for i in range(loadout_count())]
-
-
 _BACKUP_PREFIX = os.path.basename(SAVE_PATH) + ".backup-"
 
 
@@ -1128,14 +1192,13 @@ def _list_backup_filenames():
 def backup_save(keep=20):
     """Copies Loadout.sav to a timestamped .backup-<ts> file alongside it, then
     prunes down to the `keep` most recent backups so these don't accumulate
-    forever (see docs/DOCUMENTATION.md §5.2). The timestamp is second-
+    forever (see docs/INTERNALS.md §5.2). The timestamp is second-
     resolution, so a `-2`/`-3`/... suffix is appended whenever that exact
     filename is already taken (confirmed to happen in practice -- three
     _apply_verified() calls in a fast test run all landed in the same
     second and would otherwise have silently overwritten the same backup
     slot, each save() call's real "before this edit" state clobbering the
     previous one's instead of each being individually recoverable)."""
-    import shutil, time
     ts = time.strftime("%Y%m%d-%H%M%S")
     dst = SAVE_PATH + f".backup-{ts}"
     n = 2
@@ -1157,7 +1220,6 @@ _BACKUP_TS_RE = re.compile(r"^(\d{8}-\d{6})(?:-(\d+))?$")
 
 def list_backups():
     """Available Loadout.sav backups, newest first, as (display_label, full_path)."""
-    import time
     d = os.path.dirname(SAVE_PATH)
     out = []
     for fname in reversed(_list_backup_filenames()):
@@ -1187,10 +1249,10 @@ def restore_backup(backup_path):
 def _snapshot_loadouts(path):
     """Full structural snapshot of every loadout in `path`, as plain
     lists/strings (no gvas2 region objects, so two snapshots can be compared
-    with plain ==). Same shape dump_loadout()/dump_all_loadouts() expose
-    publicly, just including attachments too (which those two intentionally
-    leave out) since a write-verification pass needs the complete picture,
-    not just the two fields the UI displays."""
+    with plain ==). Same shape dump_loadout() exposes publicly, just
+    including attachments too (which it intentionally leaves out) since a
+    write-verification pass needs the complete picture, not just the two
+    fields the UI displays."""
     d, regs, rows, L = gvas2.slots(path)
 
     def names(region):
@@ -1236,7 +1298,7 @@ def _apply_verified(edit_fn, expect_fn):
     as a safety net; a mid-edit crash could leave Loadout.sav partially
     updated (e.g. bundle changed but not weapon). This closes that gap."""
     backup_save()
-    original_bytes = open(SAVE_PATH, "rb").read()
+    original_bytes = Path(SAVE_PATH).read_bytes()
     before = _snapshot_loadouts(SAVE_PATH)
     candidate = SAVE_PATH + ".pending"
     shutil.copy2(SAVE_PATH, candidate)
@@ -1249,7 +1311,7 @@ def _apply_verified(edit_fn, expect_fn):
                 f"Candidate edit did not match the expected result -- live save left untouched.\n"
                 f"expected: {expected}\nactual:   {actual}"
             )
-        if open(SAVE_PATH, "rb").read() != original_bytes:
+        if Path(SAVE_PATH).read_bytes() != original_bytes:
             raise AssertionError(
                 "Loadout.sav changed on disk during this edit (likely the game itself saving) "
                 "-- live save left untouched, retry after leaving the loadout editor."
@@ -1271,7 +1333,7 @@ def set_operator(loadout_idx, operator_name):
         gvas2.set_row_in_region(path, lambda L, i=loadout_idx: L[i]["op"], operator_name)
 
     def expect(before):
-        expected = json.loads(json.dumps(before))  # cheap deep copy, save snapshots are plain JSON-safe types
+        expected = copy.deepcopy(before)
         expected[loadout_idx]["operator"] = [operator_name]
         return expected
 
@@ -1300,7 +1362,7 @@ def set_slot_weapon(loadout_idx, slot_idx, weapon_item_name, bundle_name=None, a
                 gvas2.set_rowname(path, ks[idx]["str_off"], ks[idx]["value"], att)
 
     def expect(before):
-        expected = json.loads(json.dumps(before))
+        expected = copy.deepcopy(before)
         slot = expected[loadout_idx]["slots"][slot_idx]
         slot["bundle"] = [bundle_name]
         slot["weapon"] = [weapon_item_name]
@@ -1321,9 +1383,8 @@ def set_slot_weapon(loadout_idx, slot_idx, weapon_item_name, bundle_name=None, a
 def select_active_loadout(loadout_idx, timeout=15):
     """Calls SelectNewCurrentLoadout on the live PlayerController's loadout manager."""
     lua = f"""
-local pc = UEHelpers.GetPlayerController()
 local mgr
-pcall(function() mgr = pc.BP_LoadoutSaveManagerComponent end)
+pcall(function() mgr = pc().BP_LoadoutSaveManagerComponent end)
 if not mgr then for _,c in ipairs(FindAllOf('BP_LoadoutSaveManagerComponent_C') or {{}}) do mgr = c end end
 if not mgr then return 'manager not found' end
 local ok = pcall(function() mgr:SelectNewCurrentLoadout({loadout_idx}) end)

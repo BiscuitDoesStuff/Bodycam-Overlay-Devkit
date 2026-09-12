@@ -7,7 +7,7 @@ Layout discovered from the file itself:
 Knowing where each Size field lives lets us change a string's length and fix up
 every enclosing property's Size by the same delta. Format background and why
 this is a raw binary patch rather than a re-serialization: see
-docs/DOCUMENTATION.md section 5.2.
+docs/INTERNALS.md section 5.2.
 """
 import struct
 
@@ -113,7 +113,8 @@ def set_rowname(path, str_off, expected, new):
     """Replace a RowName FString, fixing Size on every enclosing property."""
     d, regs = regions(path)
     cur, after = rd_str(d, str_off)
-    assert cur == expected, f"at {str_off}: found {cur!r}, expected {expected!r}"
+    if cur != expected:
+        raise ValueError(f"at {str_off}: found {cur!r}, expected {expected!r}")
     delta = len(new) - len(cur)
     if delta:
         for r in regs:
@@ -156,26 +157,7 @@ def set_row_in_region(path, region_getter, new):
     d, regs, rows, L = slots(path)
     region = region_getter(L)
     ks = row_in(rows, region)
-    assert len(ks) == 1, f"expected 1 RowName in region, found {len(ks)}"
+    if len(ks) != 1:
+        raise ValueError(f"expected 1 RowName in region, found {len(ks)}")
     return set_rowname(path, ks[0]['str_off'], ks[0]['value'], new)
-
-def replace_payload(path, region_getter, payload):
-    """Replace a region's whole payload (e.g. an Attachments array) and fix sizes.
-    Unlike set_row_in_region, this can change the NUMBER of rows in the region
-    (set_rowname can only overwrite an existing row's value) -- needed for
-    attachment lists whose length varies per weapon family."""
-    d, regs, rows, L = slots(path)
-    tgt = region_getter(L)
-    start, end = tgt['start'], tgt['end']
-    delta = len(payload) - (end - start)
-    for r in regs:
-        if r is tgt:
-            struct.pack_into('<i', d, r['size_off'], len(payload))
-        elif r['start'] <= start and r['end'] >= end and r['size_off'] < start:
-            (sz,) = struct.unpack_from('<i', d, r['size_off'])
-            struct.pack_into('<i', d, r['size_off'], sz + delta)
-    d[start:end] = payload
-    with open(path, 'wb') as f:
-        f.write(d)
-    return delta
 
