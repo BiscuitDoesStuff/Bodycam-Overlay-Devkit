@@ -1,8 +1,5 @@
 # Bodycam Overlay
 
-[![Release](https://img.shields.io/github/v/release/BiscuitDoesStuff/BDT-Overlay-Fork)](https://github.com/BiscuitDoesStuff/BDT-Overlay-Fork/releases/latest)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
 A standalone desktop control panel for **Bodycam** — **not injected into the
 game process**. It's its own Python/Tkinter window that talks to a small
 UE4SS Lua mod running inside the game over a file-based protocol; nothing
@@ -92,14 +89,12 @@ non-obvious design decision behind the trickier parts of the source.
 
 ## Troubleshooting
 
-- **"not responding" in the status bar** — the game isn't running, it's a
-  different install than the one the overlay set up, or it was hot-reloaded
-  (Ctrl+R) instead of fully restarted after the mod was installed/updated.
-- **Something else looks wrong** — check
+- **"not responding" in the status bar** — check
   `%LOCALAPPDATA%\BodycamOverlay\overlay.log` first; it captures errors a
   `--windowed` build has no console to show.
-- **Deeper issues, or the reset procedure** — see
-  **[docs/DOCUMENTATION.md §6](docs/DOCUMENTATION.md#6-troubleshooting)**.
+- **Anything else, or the reset procedure** — see
+  **[docs/DOCUMENTATION.md §6](docs/DOCUMENTATION.md#6-troubleshooting)**
+  for the full list of causes.
 
 ## Contributing
 
@@ -119,8 +114,12 @@ is maintained by **BiscuitDoesStuff**, **clutch5.9**, **ConocoFieldsForever** �
 
 [MIT](LICENSE) for this application's own code (everything under `src/`
 except `src/ue4ss_bundle/`), original copyright preserved as the license
-requires. Bundles [RE-UE4SS](https://github.com/UE4SS-RE/RE-UE4SS)
-(MIT-licensed separately, see `src/ue4ss_bundle/ue4ss/LICENSE` for the
-vendored release's own copyright). Plugin files people write for the
+requires. Bundles a nightly build of
+[RE-UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) from its rolling
+`experimental-latest` release channel (MIT-licensed separately, see
+`src/ue4ss_bundle/ue4ss/LICENSE` for the vendored copy's own copyright) --
+the DLL carries no embedded version resource, and `experimental-latest` is
+a continuously-updated tag rather than a pinned release, so no more precise
+version can be cited. Plugin files people write for the
 Plugins tab are their own separate work — see
 [docs/DOCUMENTATION.md §4.6](docs/DOCUMENTATION.md#46-licensing-of-plugin-files).
