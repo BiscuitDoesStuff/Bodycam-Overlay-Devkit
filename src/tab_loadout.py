@@ -5,7 +5,7 @@ from tkinter import ttk, messagebox
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import BG, PANEL, INPUT, PAD, PAD_SM, PAD_LG
+from ui_theme import PANEL, INPUT, PAD, PAD_SM, PAD_LG
 from ui_common import PickerDialog
 
 
@@ -200,11 +200,7 @@ class LoadoutTab(ttk.Frame):
         self._pick_category_then_item(slot_idx, hint_category)
 
     def _pick_category_then_item(self, slot_idx, default_category):
-        win = tk.Toplevel(self.app.root)
-        win.title("Choose category")
-        win.configure(bg=BG)
-        win.attributes("-topmost", True)
-        win.bind("<Escape>", lambda e: win.destroy())
+        win = ui.toplevel(self.app.root, "Choose category")
         ui.label(win, text="Slot category (default matches this slot, but you can pick any):"
                  ).pack(padx=PAD, pady=(PAD, PAD_SM))
         cat_var = tk.StringVar(value=default_category)

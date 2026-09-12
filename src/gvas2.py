@@ -113,7 +113,8 @@ def set_rowname(path, str_off, expected, new):
     """Replace a RowName FString, fixing Size on every enclosing property."""
     d, regs = regions(path)
     cur, after = rd_str(d, str_off)
-    assert cur == expected, f"at {str_off}: found {cur!r}, expected {expected!r}"
+    if cur != expected:
+        raise ValueError(f"at {str_off}: found {cur!r}, expected {expected!r}")
     delta = len(new) - len(cur)
     if delta:
         for r in regs:
@@ -156,6 +157,7 @@ def set_row_in_region(path, region_getter, new):
     d, regs, rows, L = slots(path)
     region = region_getter(L)
     ks = row_in(rows, region)
-    assert len(ks) == 1, f"expected 1 RowName in region, found {len(ks)}"
+    if len(ks) != 1:
+        raise ValueError(f"expected 1 RowName in region, found {len(ks)}")
     return set_rowname(path, ks[0]['str_off'], ks[0]['value'], new)
 

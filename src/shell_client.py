@@ -40,7 +40,9 @@ def run_shell(script_text, timeout=60, cwd=None):
         try:
             proc = subprocess.run(
                 [bash_path, script_path],
-                capture_output=True, text=True, timeout=timeout, cwd=cwd,
+                capture_output=True, text=True, timeout=timeout,
+                cwd=cwd or os.path.expanduser("~"),
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
             return {
                 "stdout": proc.stdout,
