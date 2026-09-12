@@ -5,7 +5,7 @@ a = Analysis(
     ['src/overlay_app.py'],
     pathex=[],
     binaries=[],
-    datas=[('src/families.json', '.'), ('src/maps.json', '.'), ('src/gamemodes.json', '.'), ('src/item_catalog.json', '.'), ('src/app_icon.ico', '.'), ('src/mod', 'mod'), ('src/ue4ss_bundle', 'ue4ss_bundle')],
+    datas=[('src/families.json', '.'), ('src/maps.json', '.'), ('src/gamemodes.json', '.'), ('src/item_catalog.json', '.'), ('src/app_icon.ico', '.'), ('src/mod', 'mod'), ('src/mod_tablet', 'mod_tablet'), ('src/ue4ss_bundle', 'ue4ss_bundle')],
     hiddenimports=['pystray._win32'],
     hookspath=[],
     hooksconfig={},
