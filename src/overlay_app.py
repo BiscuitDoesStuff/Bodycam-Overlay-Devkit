@@ -5,6 +5,8 @@ windowed or borderless mode so this window can sit visually on top of it.
 Run with:  python src/overlay_app.py
 Requires the game to be running with the ClaudeBridge UE4SS mod loaded.
 """
+__version__ = "1.0.0"
+
 import ctypes
 import logging
 import logging.handlers
@@ -51,6 +53,8 @@ _MINSIZE = (680, 480)
 
 
 class App:
+    version = __version__
+
     def __init__(self):
         try:
             # Without this, Windows scales the whole window as a bitmap on
@@ -61,7 +65,7 @@ class App:
             pass
 
         self.root = tk.Tk()
-        self.root.title("Bodycam Overlay")
+        self.root.title(f"Bodycam Overlay v{__version__}")
         w = max(int(self.root.winfo_screenwidth() * 0.7), _MINSIZE[0])
         h = max(int(self.root.winfo_screenheight() * 0.7), _MINSIZE[1])
         self.root.geometry(f"{w}x{h}")
