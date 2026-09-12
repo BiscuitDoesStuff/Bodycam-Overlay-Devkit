@@ -12,7 +12,7 @@ clutch5.9's original "Bodycam Overlay", MIT-licensed. Windows-only.
   works fine with the game closed (status shows "not responding").
 - `python tests/test_offline.py` — the only test suite; no game needed.
 - `build.bat` — installs deps, runs PyInstaller against
-  `BodycamOverlay.spec`, produces `dist/BodycamOverlay.exe`.
+  `BodycamOverlayDevkit.spec`, produces `dist/BodycamOverlayDevkit.exe`.
 - Release = bump `__version__` in `overlay_app.py` + a `CHANGELOG.md`
   entry + tag `vX.Y.Z` (triggers `.github/workflows/release.yml`).
 

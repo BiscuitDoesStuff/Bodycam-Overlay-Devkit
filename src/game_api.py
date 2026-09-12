@@ -43,7 +43,7 @@ SESSION_PASSWORD = secrets.token_hex(4)
 # load_config(), called explicitly by overlay_app.py after logging is set up,
 # so a corrupt hand-edited JSON gets a real error dialog instead of silently
 # killing a --windowed exe at import time.
-_CONFIG_DIR = os.path.join(os.environ.get("LOCALAPPDATA", _HERE), "BodycamOverlay")
+_CONFIG_DIR = os.path.join(os.environ.get("LOCALAPPDATA", _HERE), "BodycamOverlayDevkit")
 
 
 def _load_json(name):

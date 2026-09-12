@@ -1,4 +1,4 @@
-# Bodycam Overlay — Internals & design notes
+# Bodycam Overlay & Devkit — Internals & design notes
 
 Background for anyone reading, maintaining, or forking the source — the
 "why" behind decisions that aren't obvious from the code alone. Per-function
@@ -135,7 +135,7 @@ Reading a weapon's actual in-game category tag crashes the process — it's a
 tool is built on. So instead: **individual items are always pulled live**
 (skins, operators, new maps), but **which family belongs to which slot
 category** lives in `families.json`, since that almost never changes. How
-the persisted copy in `%LOCALAPPDATA%\BodycamOverlay\` gets seeded, reseeded
+the persisted copy in `%LOCALAPPDATA%\BodycamOverlayDevkit\` gets seeded, reseeded
 on an update, and backed up if hand-edited is covered in
 [DOCUMENTATION §5](DOCUMENTATION.md#5-config-files--the-bakseed-mechanism),
 not repeated here.

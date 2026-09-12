@@ -1,4 +1,4 @@
-# Bodycam Overlay — Documentation
+# Bodycam Overlay & Devkit — Documentation
 
 Everything past the README quick-start: setup/reset, a per-tab how-to, where
 data actually lives, the Plugin/Saved-Command-Button file format,
@@ -47,7 +47,7 @@ rest of `ue4ss/` are never touched.
    either side is closed; both sides recreate it as needed.
 3. Rename (don't delete) the `ue4ss` folder inside **the `Binaries\Win64`
    folder the overlay reported** — check the status bar or
-   `%LOCALAPPDATA%\BodycamOverlay\overlay.log` for the actual path it
+   `%LOCALAPPDATA%\BodycamOverlayDevkit\overlay.log` for the actual path it
    detected; it depends on which Steam library Bodycam is installed to, so
    don't assume a fixed `Program Files` location.
 4. **Launch the overlay first**, not the game — it's the one that redeploys
@@ -82,7 +82,7 @@ actually controls how many bots get filled (see
 for the manual-fill fallback this app uses instead).
 
 **Reload Maps/Modes (from disk)** re-reads `families.json`/`maps.json`/
-`gamemodes.json` from your `%LOCALAPPDATA%\BodycamOverlay\` copies and
+`gamemodes.json` from your `%LOCALAPPDATA%\BodycamOverlayDevkit\` copies and
 repopulates both trees immediately — use it after hand-editing one of those
 files instead of restarting the whole app.
 
@@ -188,14 +188,14 @@ Credits, license info, and the app's version number.
 ## 3. Persistence model
 
 Everything the app persists between runs lives in one place:
-`%LOCALAPPDATA%\BodycamOverlay\` (see [§7](#7-runtime-paths) for the full
+`%LOCALAPPDATA%\BodycamOverlayDevkit\` (see [§7](#7-runtime-paths) for the full
 listing). Three different kinds of "doesn't reset" are easy to conflate —
 they're genuinely different:
 
 | What | Where | Resets on... |
 |---|---|---|
-| `families.json`/`maps.json`/`gamemodes.json` | `%LOCALAPPDATA%\BodycamOverlay\*.json` | Never on its own — hand-edited or app-written, it stays until you (or an app update, see §5) change it again |
-| Saved Command Buttons / Plugins / UI state | `%LOCALAPPDATA%\BodycamOverlay\{snippets.json, plugins\, ui_state.json}` | Never on its own |
+| `families.json`/`maps.json`/`gamemodes.json` | `%LOCALAPPDATA%\BodycamOverlayDevkit\*.json` | Never on its own — hand-edited or app-written, it stays until you (or an app update, see §5) change it again |
+| Saved Command Buttons / Plugins / UI state | `%LOCALAPPDATA%\BodycamOverlayDevkit\{snippets.json, plugins\, ui_state.json}` | Never on its own |
 | Loadout slots (`Loadout.sav`) | The game's own save file, Steam Cloud-synced | Persists like any other game save, but a full restart *before* the game re-saves can revert a same-session edit — see §2's Loadout Editor note |
 | Currency, item unlocks | Live `GameInstance` properties only, never written to a file | The **next** real currency-affecting event (a match ending, a Steam Cloud sync, a restart) — not a fixed timer, and not something this app can prevent |
 
@@ -225,7 +225,7 @@ widget format under the hood:
 |---|---|---|
 | Scope | One flat personal list | A named, shareable bundle, with optional labels/separators for layout |
 | Added via | "Save as Button..." in the Console tab | "Add Plugin..." in the Plugins tab |
-| Stored at | `%LOCALAPPDATA%\BodycamOverlay\snippets.json` | `%LOCALAPPDATA%\BodycamOverlay\plugins\<name>.json` |
+| Stored at | `%LOCALAPPDATA%\BodycamOverlayDevkit\snippets.json` | `%LOCALAPPDATA%\BodycamOverlayDevkit\plugins\<name>.json` |
 
 Exporting your Saved Command Buttons (Export All / Export Selected) already
 produces a file that works as a plugin — add a `"plugin_name"` key at the
@@ -332,7 +332,7 @@ edit the file and re-add it instead.
 
 ### 4.5 Editing an existing plugin
 
-Edit the `.json` file in `%LOCALAPPDATA%\BodycamOverlay\plugins\` directly
+Edit the `.json` file in `%LOCALAPPDATA%\BodycamOverlayDevkit\plugins\` directly
 in a text editor, then restart the overlay (or remove + re-add it) to see
 the change — plugin tabs are only built at startup / on Add Plugin, and
 there's deliberately no in-app JSON editor.
@@ -364,7 +364,7 @@ the rest is still on you.
 `families.json`/`maps.json`/`gamemodes.json` are meant to be hand-editable
 (see [INTERNALS §5.3](INTERNALS.md#53-why-some-data-is-hand-maintained-familiesjson))
 — on first run each is copied from the bundled default into
-`%LOCALAPPDATA%\BodycamOverlay\`, and every launch after that reads/writes
+`%LOCALAPPDATA%\BodycamOverlayDevkit\`, and every launch after that reads/writes
 *that* copy, not the bundled one. `item_catalog.json` is extracted data,
 never hand-edited, and is read straight from the app's own install — it is
 not seeded or copied anywhere.
@@ -395,7 +395,7 @@ isn't running, it's a different install than the one the overlay set up, or
 it was hot-reloaded (Ctrl+R) instead of fully restarted after the mod was
 installed/updated. See [§1](#1-setup--reset) for the full reset procedure.
 
-**Check the logs before anything else.** `%LOCALAPPDATA%\BodycamOverlay\overlay.log`
+**Check the logs before anything else.** `%LOCALAPPDATA%\BodycamOverlayDevkit\overlay.log`
 captures the overlay's own errors (a `--windowed` build has no console to
 print to). `%LOCALAPPDATA%\Temp\bodycam_bridge\bridge.log` is ClaudeBridge's
 own log, written from inside the game — check it if the overlay looks fine
@@ -422,12 +422,12 @@ happened because a confirmation dialog appeared and was missed — see
 
 | Path | What's there |
 |---|---|
-| `%LOCALAPPDATA%\BodycamOverlay\families.json`, `maps.json`, `gamemodes.json` | Hand-editable config, seeded from the app's bundled defaults (§5) |
-| `%LOCALAPPDATA%\BodycamOverlay\item_catalog.json` | Extracted shop-item catalog, read-only, not seeded |
-| `%LOCALAPPDATA%\BodycamOverlay\snippets.json` | Saved Command Buttons |
-| `%LOCALAPPDATA%\BodycamOverlay\plugins\*.json` | Installed Plugins |
-| `%LOCALAPPDATA%\BodycamOverlay\ui_state.json` | Host tab's last-used map/gamemode/cap/team/private/bots |
-| `%LOCALAPPDATA%\BodycamOverlay\overlay.log` | The overlay's own log (rotating, capped) |
+| `%LOCALAPPDATA%\BodycamOverlayDevkit\families.json`, `maps.json`, `gamemodes.json` | Hand-editable config, seeded from the app's bundled defaults (§5) |
+| `%LOCALAPPDATA%\BodycamOverlayDevkit\item_catalog.json` | Extracted shop-item catalog, read-only, not seeded |
+| `%LOCALAPPDATA%\BodycamOverlayDevkit\snippets.json` | Saved Command Buttons |
+| `%LOCALAPPDATA%\BodycamOverlayDevkit\plugins\*.json` | Installed Plugins |
+| `%LOCALAPPDATA%\BodycamOverlayDevkit\ui_state.json` | Host tab's last-used map/gamemode/cap/team/private/bots |
+| `%LOCALAPPDATA%\BodycamOverlayDevkit\overlay.log` | The overlay's own log (rotating, capped) |
 | `%LOCALAPPDATA%\Temp\bodycam_bridge\` | `req.txt`/`resp.txt` (the live RPC channel) + `bridge.log` (ClaudeBridge's own log) |
 | `<Bodycam>\Binaries\Win64\ue4ss\` | UE4SS itself + all Mods, including ClaudeBridge — the exact folder location depends on which Steam library Bodycam is installed to |
 | `<Bodycam>\Binaries\Win64\ue4ss\Mods\mods.txt` | Enabled mods. Besides `ClaudeBridge`, expects 6 UE4SS enabler mods this app relies on: `CheatManagerEnablerMod`, `ConsoleCommandsMod`, `ConsoleEnablerMod`, `BPML_GenericFunctions`, `BPModLoaderMod`, `Keybinds` |

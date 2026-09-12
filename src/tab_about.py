@@ -5,7 +5,7 @@ from tkinter import ttk
 import ui_theme as ui
 from ui_theme import PAD_LG, RED
 
-_FORK_URL = "https://github.com/BiscuitDoesStuff/BDT-Overlay-Fork"
+_FORK_URL = "https://github.com/BiscuitDoesStuff/Bodycam-Overlay-Devkit"
 
 
 class AboutTab(ttk.Frame):
@@ -16,7 +16,7 @@ class AboutTab(ttk.Frame):
         super().__init__(parent)
         self.app = app
 
-        ui.label(self, text="Bodycam Overlay -- Bodycam Devkit Overlay", header=True).pack(anchor="w", padx=PAD_LG, pady=(PAD_LG + 4, 0))
+        ui.label(self, text="Bodycam Overlay & Devkit", header=True).pack(anchor="w", padx=PAD_LG, pady=(PAD_LG + 4, 0))
         ui.label(self, text=f"Version {app.version}", muted=True).pack(anchor="w", padx=PAD_LG, pady=(0, 2))
         ui.label(self, text="A standalone external control panel for Bodycam -- "
                              "not injected into the game process.", muted=True, wraplength=600,
@@ -28,9 +28,9 @@ class AboutTab(ttk.Frame):
                  muted=True, wraplength=600, justify="left").pack(anchor="w", padx=PAD_LG, pady=(0, PAD_LG))
 
         ui.label(self, text="This fork", bold=True).pack(anchor="w", padx=PAD_LG, pady=(0, 2))
-        ui.label(self, text="BDT Overlay Fork, maintained by BiscuitDoesStuff --",
+        ui.label(self, text="Bodycam Overlay & Devkit, maintained by BiscuitDoesStuff --",
                  muted=True, wraplength=600, justify="left").pack(anchor="w", padx=PAD_LG)
-        url_lbl = ui.label(self, text="github.com/BiscuitDoesStuff/BDT-Overlay-Fork",
+        url_lbl = ui.label(self, text="github.com/BiscuitDoesStuff/Bodycam-Overlay-Devkit",
                             fg=RED, cursor="hand2")
         url_lbl.pack(anchor="w", padx=PAD_LG)
         url_lbl.bind("<Button-1>", lambda e: webbrowser.open(_FORK_URL))

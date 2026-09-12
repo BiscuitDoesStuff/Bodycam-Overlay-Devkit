@@ -1,4 +1,4 @@
-# Bodycam Overlay
+# Bodycam Overlay & Devkit
 
 A standalone desktop control panel for **Bodycam** — **not injected into the
 game process**. It's its own Python/Tkinter window that talks to a small
@@ -39,8 +39,8 @@ player. Use offline or in private/solo matches if you want to be sure.
 
 **From a Release (recommended):**
 
-1. Download `BodycamOverlay.exe` from the
-   [latest Release](https://github.com/BiscuitDoesStuff/BDT-Overlay-Fork/releases/latest).
+1. Download `BodycamOverlayDevkit.exe` from the
+   [latest Release](https://github.com/BiscuitDoesStuff/Bodycam-Overlay-Devkit/releases/latest).
 2. Run it.
 3. Press **Insert** to show the window. First launch deploys UE4SS +
    ClaudeBridge into your Bodycam install automatically — **fully restart
@@ -90,7 +90,7 @@ non-obvious design decision behind the trickier parts of the source.
 ## Troubleshooting
 
 - **"not responding" in the status bar** — check
-  `%LOCALAPPDATA%\BodycamOverlay\overlay.log` first; it captures errors a
+  `%LOCALAPPDATA%\BodycamOverlayDevkit\overlay.log` first; it captures errors a
   `--windowed` build has no console to show.
 - **Anything else, or the reset procedure** — see
   **[docs/DOCUMENTATION.md §6](docs/DOCUMENTATION.md#6-troubleshooting)**
@@ -106,9 +106,9 @@ Button pack or Plugin? See **[community/](community)**.
 
 ## Credits & License
 
-Original project created by **clutch5.9**. This fork, **BDT Overlay Fork**,
+Original project created by **clutch5.9**. This fork, **Bodycam Overlay & Devkit**,
 is maintained by **BiscuitDoesStuff**, **clutch5.9**, **ConocoFieldsForever** —
-- [github.com/BiscuitDoesStuff/BDT-Overlay-Fork](https://github.com/BiscuitDoesStuff/BDT-Overlay-Fork)
+- [github.com/BiscuitDoesStuff/Bodycam-Overlay-Devkit](https://github.com/BiscuitDoesStuff/Bodycam-Overlay-Devkit)
 - [https://github.com/CLUTCH5point9](https://github.com/CLUTCH5point9)
 - [https://github.com/ConocoFieldsForever/BDT-Overlay-Fork](https://github.com/ConocoFieldsForever/BDT-Overlay-Fork)
 

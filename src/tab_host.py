@@ -681,7 +681,7 @@ class HostTab(ttk.Frame):
                         f"Found a class for '{name}':\n{class_path}\n\n"
                         "Add it to gamemodes.json with a default cap of 8 (non-team), "
                         "listed under UNTESTED? You can hand-edit team_based/cap/team_size/"
-                        "status afterward in %LOCALAPPDATA%\\BodycamOverlay\\gamemodes.json -- "
+                        "status afterward in %LOCALAPPDATA%\\BodycamOverlayDevkit\\gamemodes.json -- "
                         "this hasn't been tested in an actual match yet."):
                     api.add_gamemode(name, class_path)
             self.gamemodes = api.list_gamemodes()

@@ -12,6 +12,6 @@ jobs:
       - run: python tests/test_offline.py
       - shell: bash
         run: grep -q "__version__ = \"${GITHUB_REF_NAME#v}\"" src/overlay_app.py
-      - run: python -m PyInstaller --noconfirm BodycamOverlay.spec
+      - run: python -m PyInstaller --noconfirm BodycamOverlayDevkit.spec
       - uses: softprops/action-gh-release@v3
-        with: { files: dist/BodycamOverlay.exe, generate_release_notes: true }
+        with: { files: dist/BodycamOverlayDevkit.exe, generate_release_notes: true }

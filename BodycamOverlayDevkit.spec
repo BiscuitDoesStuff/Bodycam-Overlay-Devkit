@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='BodycamOverlay',
+    name='BodycamOverlayDevkit',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

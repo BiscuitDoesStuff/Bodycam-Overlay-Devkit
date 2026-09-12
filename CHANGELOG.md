@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+- Renamed the project to **Bodycam Overlay & Devkit** (was BDT Overlay Fork).
+  The GitHub repo, packaged exe (`BodycamOverlayDevkit.exe`), and the
+  `%LOCALAPPDATA%\BodycamOverlayDevkit\` config folder all moved to match.
+
 ## [1.0.0] — 2026-09-12
 
 ### Changed

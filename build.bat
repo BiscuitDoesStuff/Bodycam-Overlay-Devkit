@@ -1,7 +1,7 @@
 @echo off
 setlocal
 REM Packages src\overlay_app.py into a standalone exe with PyInstaller, using
-REM BodycamOverlay.spec as the single source of truth for what gets bundled
+REM BodycamOverlayDevkit.spec as the single source of truth for what gets bundled
 REM (icon, data files, hidden imports, --onefile/--windowed) -- edit the spec
 REM file directly, not this script, to change any of that. Run from the repo
 REM root -- paths below are relative to it.
@@ -34,7 +34,7 @@ if errorlevel 1 (
 
 echo.
 echo Running PyInstaller...
-python -m PyInstaller --noconfirm BodycamOverlay.spec
+python -m PyInstaller --noconfirm BodycamOverlayDevkit.spec
 if errorlevel 1 (
     echo.
     echo PyInstaller failed -- see the error above.
@@ -42,7 +42,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo Done. Exe is at dist\BodycamOverlay.exe
+echo Done. Exe is at dist\BodycamOverlayDevkit.exe
 pause
 exit /b 0
 

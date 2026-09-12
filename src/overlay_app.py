@@ -65,7 +65,7 @@ class App:
             pass
 
         self.root = tk.Tk()
-        self.root.title(f"Bodycam Overlay v{__version__}")
+        self.root.title(f"Bodycam Overlay & Devkit v{__version__}")
         w = max(int(self.root.winfo_screenwidth() * 0.7), _MINSIZE[0])
         h = max(int(self.root.winfo_screenheight() * 0.7), _MINSIZE[1])
         self.root.geometry(f"{w}x{h}")
@@ -145,7 +145,7 @@ class App:
             pystray.MenuItem("Show/Hide (Insert)", lambda: self.toggle()),
             pystray.MenuItem("Exit", lambda: self.quit_app()),
         )
-        self.tray_icon = pystray.Icon("BodycamOverlay", image, "Bodycam Overlay", menu)
+        self.tray_icon = pystray.Icon("BodycamOverlayDevkit", image, "Bodycam Overlay & Devkit", menu)
         threading.Thread(target=self.tray_icon.run, daemon=True).start()
 
     def quit_app(self):
@@ -313,7 +313,7 @@ if __name__ == "__main__":
         _root.withdraw()
         _mb.showwarning(
             "Already running",
-            "Bodycam Overlay is already running (check your system tray / taskbar, "
+            "Bodycam Overlay & Devkit is already running (check your system tray / taskbar, "
             "or press Insert). This copy will now close instead of opening a second, "
             "conflicting instance.")
         sys.exit(0)
