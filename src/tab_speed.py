@@ -123,16 +123,17 @@ class SpeedTab(ttk.Frame):
 
         self._refresh_current()
 
+    def _run_cheat(self, status_msg, api_fn, done_msg):
+        """Collapses the status/work/done/runner.run shape every simple,
+        no-argument self-only cheat button below shares -- api_fn is called
+        with no args, done_msg replaces the status on success, errors go
+        through self.app.on_error("ERROR")."""
+        self.app.status(status_msg)
+        self.app.runner.run(api_fn, lambda _r: self.app.status(done_msg), self.app.on_error("ERROR"))
+
     def _clear_perk_cooldown_once(self):
-        self.app.status("Clearing perk/gadget cooldown...")
-
-        def work():
-            return api.disable_perk_cooldown()
-
-        def done(_result):
-            self.app.status("Perk/gadget cooldown cleared")
-
-        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+        self._run_cheat("Clearing perk/gadget cooldown...", api.disable_perk_cooldown,
+                         "Perk/gadget cooldown cleared")
 
     def _on_auto_clear_toggle(self):
         if self.auto_clear_var.get():
@@ -163,37 +164,15 @@ class SpeedTab(ttk.Frame):
         self.app.root.after(interval_ms, self._auto_clear_tick)
 
     def _kill_self(self):
-        self.app.status("Killing self...")
-
-        def work():
-            return api.kill_self()
-
-        def done(_result):
-            self.app.status("Killed self")
-
-        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+        self._run_cheat("Killing self...", api.kill_self, "Killed self")
 
     def _set_invincible(self):
-        self.app.status("Toggling invincibility...")
-
-        def work():
-            return api.set_invincible()
-
-        def done(_result):
-            self.app.status("Invincibility toggled (not independently confirmed which state it's now in)")
-
-        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+        self._run_cheat("Toggling invincibility...", api.set_invincible,
+                         "Invincibility toggled (not independently confirmed which state it's now in)")
 
     def _set_infinite_ammo(self):
-        self.app.status("Toggling infinite ammo...")
-
-        def work():
-            return api.set_infinite_ammo()
-
-        def done(_result):
-            self.app.status("Infinite ammo toggled (not independently confirmed which state it's now in)")
-
-        self.app.runner.run(work, done, self.app.on_error("ERROR"))
+        self._run_cheat("Toggling infinite ammo...", api.set_infinite_ammo,
+                         "Infinite ammo toggled (not independently confirmed which state it's now in)")
 
     def _set_speed(self, value):
         run_cheat_snippet(self.app, f"pc.CheatManager:Slomo({value})",

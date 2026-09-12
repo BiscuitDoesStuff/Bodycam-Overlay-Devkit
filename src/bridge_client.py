@@ -4,6 +4,7 @@ Talks to the ClaudeBridge UE4SS mod (mod/ClaudeBridge/Scripts/main.lua) over
 two files under %LOCALAPPDATA%\\Temp\\<name>_bridge. Protocol shape and
 design rationale: see docs/DOCUMENTATION.md section 5.1.
 """
+import itertools
 import os
 import threading
 import time
@@ -13,7 +14,6 @@ _DIR = os.path.join(os.environ["LOCALAPPDATA"], "Temp", f"{BRIDGE_NAME}_bridge")
 _REQ = os.path.join(_DIR, "req.txt")
 _RESP = os.path.join(_DIR, "resp.txt")
 _TMP = os.path.join(_DIR, "req.tmp")
-_SEQ = os.path.join(_DIR, "seq.txt")
 
 # req.txt/resp.txt are a single slot, not a queue -- ClaudeBridge itself only
 # ever tracks one in-flight request (see docs/DOCUMENTATION.md §5.1's "busy"
@@ -34,10 +34,6 @@ class BridgeError(Exception):
     pass
 
 
-class BridgeTimeout(BridgeError):
-    pass
-
-
 _RETURN_MARKER = "-- return: "
 
 
@@ -51,22 +47,17 @@ def _extract_return_value(body):
     return body[idx + len(_RETURN_MARKER):]
 
 
-def _next_id():
-    n = 0
-    if os.path.exists(_SEQ):
-        try:
-            n = int(open(_SEQ).read().strip())
-        except ValueError:
-            n = 0
-    n += 1
-    with open(_SEQ, "w") as f:
-        f.write(str(n))
-    return n
+# Just needs to differ from the immediately-previous request's id -- the Lua
+# side's own dedup (`lastId`) resets to nil on every game/mod (re)load, so
+# there's nothing to gain by persisting this across Python restarts the way
+# an earlier version did (a seq.txt file, read/parsed/rewritten on every
+# single call). An in-memory counter does the same job with no disk I/O.
+_next_id = itertools.count(1).__next__
 
 
 def _send(src, timeout):
     """Sends src, waits for the matching response. Returns raw body (str).
-    Raises BridgeTimeout if the game/mod doesn't answer, BridgeError on a Lua error.
+    Raises BridgeError if the game/mod doesn't answer or on a Lua error.
     Serialized by _send_lock -- see its comment for why concurrent Python-side
     callers can't just race on the shared request/response files."""
     with _send_lock:
@@ -99,7 +90,7 @@ def _send(src, timeout):
                         raise BridgeError(body.strip() or f"bridge returned status {status}")
                     return body
             time.sleep(0.08)
-        raise BridgeTimeout(
+        raise BridgeError(
             f"No response from the game within {timeout}s. Check: (1) Bodycam is running, "
             "(2) it's the same install this overlay was set up for, (3) the ClaudeBridge mod "
             "is listed in ue4ss/Mods/mods.txt. If ClaudeBridge was never installed, run "
