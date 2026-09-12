@@ -407,22 +407,22 @@ return cls .. '|' .. ph .. '|' .. tostring(n) .. '|' .. tostring(mx) .. '|' .. t
     }
 
 
-# Shared by get_match_info()/get_lobby_roster()/get_adversary_info() below --
-# all three read a Blueprint struct shaped like FSTR_PCInfo (a live player's
-# team/kill/death/score/rank, GUID-mangled field names matched by PREFIX
-# since only the prefix is stable across a Blueprint recompile) and used to
-# each reimplement this same field walk independently. One definition here,
-# embedded into each of those three Lua payloads (they're separate stateless
+# Shared by get_match_info()/get_lobby_roster() below -- both read a
+# Blueprint struct shaped like FSTR_PCInfo (a live player's team/kill/death/
+# score/rank, GUID-mangled field names matched by PREFIX since only the
+# prefix is stable across a Blueprint recompile) and used to each
+# reimplement this same field walk independently. One definition here,
+# embedded into each of those two Lua payloads (they're separate stateless
 # ClaudeBridge calls, so it can't be a Lua-side function registered once --
 # this just keeps there being exactly one Python-side source of truth for
-# what "the safe PCInfo fields" means, instead of three copies that could
+# what "the safe PCInfo fields" means, instead of two copies that could
 # drift). `prefix` distinguishes get_match_info()'s "my_team"/"my_kills"
-# style (reading the local player) from get_lobby_roster()/
-# get_adversary_info()'s unprefixed "team"/"kills" style (reading someone
-# else) -- same field names otherwise. Deliberately only reads plain
-# ints/strings -- see each caller's own docstring for why the PC/Character/
-# SteamID/SkinInfo/BadgeInfo fields and KillInfo are never touched beyond
-# this (a real crash, confirmed live, not caution for its own sake).
+# style (reading the local player) from get_lobby_roster()'s unprefixed
+# "team"/"kills" style (reading someone else) -- same field names
+# otherwise. Deliberately only reads plain ints/strings -- see each
+# caller's own docstring for why the PC/Character/SteamID/SkinInfo/
+# BadgeInfo fields and KillInfo are never touched beyond this (a real
+# crash, confirmed live, not caution for its own sake).
 _PC_FIELDS_LUA_HELPER = r"""
 local function extract_pc_fields(t, out, prefix)
     for k, v in pairs(t) do
@@ -523,7 +523,7 @@ out[#out+1] = 'server_steam_id=' .. safe_out(function(t) gm:GetServerSteamID(t) 
 
 -- GetPcInfo (Lobby-only, like the three above) hands back the local player's
 -- own FSTR_PCInfo -- see _PC_FIELDS_LUA_HELPER's own comment for the field
--- allowlist/exclusions this shares with get_lobby_roster()/get_adversary_info().
+-- allowlist/exclusions this shares with get_lobby_roster().
 local pcOk, pcErr = pcall(function()
     local t = {}
     gm:GetPcInfo(t)
@@ -817,63 +817,6 @@ return ok and 'OK' or ('ERR: ' .. tostring(err))
         raise RuntimeError(result)
 
 
-def get_adversary_info(timeout=15):
-    """Read-only info about another connected player via
-    CheatManager:GetRandomAdversary(FSTR_PCInfo&) -- confirmed live
-    (2026-09-07, with a real second player connected) to return that other
-    player's actual FSTR_PCInfo, not an empty/default one: PC and Character
-    were both confirmed non-nil (existence check only, `~= nil`, no methods
-    called on them -- see the crash notes below for why that boundary
-    matters). Team/Stats extraction mirrors get_match_info()'s my_* fields
-    exactly (same safe-field allowlist, same exclusions: never touches
-    PC/Character/SteamID/SkinInfo/BadgeInfo beyond existence, never
-    recurses into KillInfo).
-
-    THIS FUNCTION IS READ-ONLY AND SAFE. Do not use its result as the basis
-    for constructing an argument to AssignTeam/KickPlayer -- passing this
-    exact kind of struct (a real other-player FSTR_PCInfo, unmodified)
-    straight into AssignTeam crashed the game outright, confirmed live,
-    twice (once with a self struct, once with a real second player's
-    struct obtained via this same function). AssignTeam/KickPlayer
-    are not implemented anywhere in this file for this reason. Reading
-    values out of the struct this function returns is fine; feeding that
-    struct into a UFunction argument is not.
-
-    IMPORTANT CAVEAT, confirmed live: this does NOT reliably return None
-    when solo. Tested alone (no other player connected) and it still
-    returned a populated dict (team=0, all stats=0) rather than nothing --
-    `GetRandomAdversary` appears to hand back some struct (possibly your
-    own, possibly an uninitialized-but-present one) even with no one else
-    around, and there's no safe way to tell the difference without
-    inspecting PC/Character, which this function deliberately never does.
-    Practical upshot: a all-zero/blank result here is NOT reliable proof
-    someone else is or isn't present -- cross-check against
-    get_player_roster()'s count for that instead. Only returns None if the
-    call itself errors, which hasn't been observed."""
-    lua = _PC_FIELDS_LUA_HELPER + r"""
-local pc = UEHelpers.GetPlayerController()
-local t = {}
-local ok = pcall(function() pc.CheatManager:GetRandomAdversary(t) end)
-if not ok then return 'NONE' end
-local hasAny = false
-for _ in pairs(t) do hasAny = true break end
-if not hasAny then return 'NONE' end
-
-local out = {}
-extract_pc_fields(t, out, '')
-return table.concat(out, '\n')
-"""
-    body = bc.run_lua(lua, timeout=timeout).strip()
-    if body in ("NONE", ""):
-        return None
-    info = {}
-    for line in body.splitlines():
-        if "=" in line:
-            k, v = line.split("=", 1)
-            info[k] = v
-    return info
-
-
 # Candidate class paths for gamemodes DT_GamemodeInfo/DT_GameModeData list
 # (Zombie, Pit, Training, OnlyPistol) that aren't in gamemodes.json -- the 7
 # modes already there all live at /Game/GM/Gamemode/GM_<Name>.GM_<Name>_C, so
@@ -1027,83 +970,6 @@ ExecuteWithDelay(1000, function() ExecuteInGameThread(step) end)
 return 'bot fill gen ' .. MYGEN .. ' armed, target=' .. TARGET
 """
     return bc.run_lua(lua, timeout=timeout)
-
-
-def set_explosive_bullets(enabled, damage=50.0, radius=300.0, timeout=15):
-    """Registers (once per process) a post-hook on WEP_C:SpawnImpactEffects --
-    fires on EVERY bullet impact -- and, while enabled, calls the engine's own
-    ApplyRadialDamage at the hit location. A hot-path hook, so its guards
-    (enabled-check first, one-time registration, pcall-wrapped) are
-    load-bearing, not decorative -- see docs/DOCUMENTATION.md §5.5. Not
-    independently verified against live rapid-fire yet -- test with a few
-    individual shots before trusting it in a real firefight."""
-    lua = f"""
-_G.EXPLOSIVE_BULLETS = _G.EXPLOSIVE_BULLETS or {{enabled = false, damage = 50.0, radius = 300.0}}
-_G.EXPLOSIVE_BULLETS.enabled = {str(bool(enabled)).lower()}
-_G.EXPLOSIVE_BULLETS.damage = {damage}
-_G.EXPLOSIVE_BULLETS.radius = {radius}
-
-if not _G.EXPLOSIVE_BULLETS_HOOKED then
-    _G.EXPLOSIVE_BULLETS_HOOKED = true
-    RegisterHook("/Game/BodycamWeapons/Core/Blueprint/WEP.WEP_C:SpawnImpactEffects",
-        function() end,
-        function(Context)
-            if not (_G.EXPLOSIVE_BULLETS and _G.EXPLOSIVE_BULLETS.enabled) then return end
-            pcall(function()
-                local self = Context:get()
-                local hitLoc = Context.HitLocation
-                if not hitLoc then return end
-                local GS = StaticFindObject('/Script/Engine.Default__GameplayStatics')
-                local w = UEHelpers.GetWorld()
-                GS:ApplyRadialDamage(w, _G.EXPLOSIVE_BULLETS.damage, hitLoc,
-                    _G.EXPLOSIVE_BULLETS.radius, nil, {{}}, self, nil, true, 0)
-            end)
-        end)
-end
-return 'explosive bullets: enabled=' .. tostring(_G.EXPLOSIVE_BULLETS.enabled) ..
-       ' damage=' .. tostring(_G.EXPLOSIVE_BULLETS.damage) ..
-       ' radius=' .. tostring(_G.EXPLOSIVE_BULLETS.radius) ..
-       ' (hook registered=' .. tostring(_G.EXPLOSIVE_BULLETS_HOOKED) .. ')'
-"""
-    return bc.run_lua(lua, timeout=timeout)
-
-
-def enable_all_nametags(timeout=15):
-    """Forces every W_PlayerIndicator_C (the same widget that shows teammate
-    nametags in Versus/TDM) visible, regardless of team -- a periodic keeper
-    loop since these widgets are pooled/reused and new ones appear as players
-    come in range. Whether a name actually populates depends on the game's own
-    proximity/line-of-sight logic, which can't be verified by reflection alone
-    -- try it live and see what shows up."""
-    lua = r"""
-_G.NAMETAGS = _G.NAMETAGS or {}
-_G.NAMETAGS.gen = (_G.NAMETAGS.gen or 0) + 1
-local MYGEN = _G.NAMETAGS.gen
-local function tick()
-    if _G.NAMETAGS.gen ~= MYGEN then return end
-    local ws = FindAllOf('W_PlayerIndicator_C') or {}
-    local forced = 0
-    for _, w in ipairs(ws) do
-        local ok = pcall(function()
-            w.bShouldBeHidden = false
-            w:SetVisibility(0)
-        end)
-        if ok then forced = forced + 1 end
-    end
-    _G.NAMETAGS.lastCount = forced
-    ExecuteWithDelay(1500, function() ExecuteInGameThread(tick) end)
-end
-ExecuteWithDelay(200, function() ExecuteInGameThread(tick) end)
-return 'nametag-reveal loop gen ' .. MYGEN .. ' armed'
-"""
-    return bc.run_lua(lua, timeout=timeout)
-
-
-def disable_all_nametags(timeout=10):
-    """Cancels the enable_all_nametags loop without forcing anything back hidden
-    (the game's own team-check logic resumes controlling visibility from here)."""
-    return bc.run_lua("_G.NAMETAGS = _G.NAMETAGS or {}; _G.NAMETAGS.gen = (_G.NAMETAGS.gen or 0) + 1; "
-                       "return 'stopped'", timeout=timeout)
 
 
 def stop_bot_fill(timeout=10):
@@ -1538,18 +1404,6 @@ return tostring(gi.ActualReissadPointsScore) .. '|' .. tostring(gi.MaxAllowedRei
     return {"balance": int(balance_s), "cap": int(cap_s)}
 
 
-def is_item_unlocked(item_id, timeout=15):
-    """Checks GameInstance.PlayerInventoryItems (a live TSet<int32> of owned
-    item ids) for one id -- confirmed live to genuinely reflect real
-    ownership: cross-checked against real itemdefid values read directly
-    from PlayerSkin.sav's Weapons/Skin/Badge arrays."""
-    lua = f"""
-local gi = UEHelpers.GetGameInstance()
-return tostring(gi.PlayerInventoryItems:Contains({int(item_id)}))
-"""
-    return bc.run_lua(lua, timeout=timeout).strip() == "true"
-
-
 def unlock_items(item_ids, timeout=20):
     """Adds one or more item ids to GameInstance.PlayerInventoryItems (a live
     TSet<int32>) -- confirmed live 2026-09-07, both mechanically (add/remove/
@@ -1594,19 +1448,6 @@ return 'done'
 def unlock_item(item_id, timeout=15):
     """Single-id convenience wrapper around unlock_items()."""
     unlock_items([item_id], timeout=timeout)
-
-
-def lock_item(item_id, timeout=15):
-    """Removes one id from GameInstance.PlayerInventoryItems -- confirmed
-    live (add/remove/contains round-trip tested on a throwaway id). Exists
-    mainly to undo a mistaken unlock_item() call, not as a shipped "re-lock"
-    feature -- the game itself has no UI for taking an item away."""
-    lua = f"""
-local gi = UEHelpers.GetGameInstance()
-pcall(function() gi.PlayerInventoryItems:Remove({int(item_id)}) end)
-return 'done'
-"""
-    bc.run_lua(lua, timeout=timeout)
 
 
 def unlock_all_items(timeout=60):

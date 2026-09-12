@@ -1,9 +1,9 @@
 """Shell tab -- runs raw Bash scripts on the local PC via Git Bash."""
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk
 
 import ui_theme as ui
-from ui_theme import BG, PANEL, INPUT, FG, MUTED, ACCENT, GOOD, BAD, PAD, PAD_SM, PAD_LG
+from ui_theme import PAD, PAD_SM, PAD_LG
 import shell_client
 from ui_common import ConsoleShellMixin
 

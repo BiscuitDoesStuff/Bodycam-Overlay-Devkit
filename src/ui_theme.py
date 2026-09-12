@@ -40,11 +40,8 @@ RED_MUTED = "#7a2530"   # for a quiet destructive outline, not a full-saturation
 # both map onto the same red family now that the palette is strictly
 # red/black/white (no separate green "success" hue).
 ACCENT = RED
-ACCENT_HOVER = RED_HOVER
 GOOD = RED
-GOOD_HOVER = RED_HOVER
 BAD = RED
-BAD_HOVER = RED_HOVER
 
 # --------------------------------------------------------------------------- fonts
 FONT_BASE = ("Segoe UI", 10)

@@ -1,11 +1,11 @@
 """Loadout Editor tab (Currency & Unlocks included)."""
 import os
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import BG, PANEL, INPUT, FG, MUTED, ACCENT, GOOD, BAD, PAD, PAD_SM, PAD_LG
+from ui_theme import BG, PANEL, INPUT, PAD, PAD_SM, PAD_LG
 from ui_common import PickerDialog
 
 

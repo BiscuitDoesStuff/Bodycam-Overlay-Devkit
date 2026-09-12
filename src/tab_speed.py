@@ -1,10 +1,10 @@
 """Game Speed tab: Slomo, Player Cheats, Perk/Gadget Cooldown."""
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import BG, PANEL, INPUT, FG, MUTED, ACCENT, GOOD, BAD, PAD, PAD_SM, PAD_LG
+from ui_theme import PAD, PAD_SM, PAD_LG
 
 
 def run_cheat_snippet(app, snippet, on_extra_done=None):

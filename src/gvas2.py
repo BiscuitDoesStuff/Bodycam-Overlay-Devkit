@@ -160,7 +160,10 @@ def set_row_in_region(path, region_getter, new):
     return set_rowname(path, ks[0]['str_off'], ks[0]['value'], new)
 
 def replace_payload(path, region_getter, payload):
-    """Replace a region's whole payload (e.g. an Attachments array) and fix sizes."""
+    """Replace a region's whole payload (e.g. an Attachments array) and fix sizes.
+    Unlike set_row_in_region, this can change the NUMBER of rows in the region
+    (set_rowname can only overwrite an existing row's value) -- needed for
+    attachment lists whose length varies per weapon family."""
     d, regs, rows, L = slots(path)
     tgt = region_getter(L)
     start, end = tgt['start'], tgt['end']
@@ -176,28 +179,3 @@ def replace_payload(path, region_getter, payload):
         f.write(d)
     return delta
 
-def payload_of(path, region_getter):
-    d, regs, rows, L = slots(path)
-    r = region_getter(L)
-    return bytes(d[r['start']:r['end']])
-
-def set_index(path, n):
-    """Set SavedCurrentLoadoutIndex, INSERTING the property if the game omitted it (it drops
-    properties equal to their default, so index 0 disappears from the file)."""
-    d, regs = regions(path)
-    d = bytearray(d)
-    idx = [r for r in regs if r['name'] == 'SavedCurrentLoadoutIndex']
-    if idx:
-        struct.pack_into('<i', d, idx[0]['start'], n)
-    else:
-        tag = b'/Game/GM/SaveGame/SG_Loadout.SG_Loadout_C'
-        start = d.find(tag) + len(tag) + 2          # NUL + padding byte -> first property
-        def fstr(s): b = s.encode('ascii') + b'\x00'; return struct.pack('<i', len(b)) + b
-        prop = (fstr('SavedCurrentLoadoutIndex') + fstr('IntProperty') + struct.pack('<i', 0)
-                + struct.pack('<i', 4) + b'\x00' + struct.pack('<i', n))
-        d[start:start] = prop
-    with open(path, 'wb') as f:
-        f.write(d)
-    d2, regs2 = regions(path)
-    r = [x for x in regs2 if x['name'] == 'SavedCurrentLoadoutIndex'][0]
-    return struct.unpack_from('<i', d2, r['start'])[0]
