@@ -8,7 +8,9 @@ the trickier live-game hacks below (bot fill, cap/travel ordering,
 cycle_match's map-name matching) is centralized in that same file,
 section 5.5, rather than repeated per function.
 """
+import filecmp
 import json
+import logging
 import os
 import re
 import shutil
@@ -26,21 +28,26 @@ SAVE_PATH = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Bodycam", "Saved",
 # families.json / maps.json / gamemodes.json are meant to be hand-editable
 # (see README) -- that only works if edits survive a restart, which _HERE
 # alone can't guarantee in a packaged exe. Seed a persistent copy in AppData
-# on first run, then always read/write THAT copy; the bundled files under
-# _HERE are just the initial defaults, never touched again after seeding.
+# on first run (see load_config() below), then always read/write THAT copy;
+# the bundled files under _HERE are just the initial defaults.
+# Just a path -- no I/O here. Seeding/directory-creation happens in
+# load_config(), called explicitly by overlay_app.py after logging is set up,
+# so a corrupt hand-edited JSON gets a real error dialog instead of silently
+# killing a --windowed exe at import time.
 _CONFIG_DIR = os.path.join(os.environ.get("LOCALAPPDATA", _HERE), "BodycamOverlay")
-os.makedirs(_CONFIG_DIR, exist_ok=True)
-for _cfg_name in ("families.json", "maps.json", "gamemodes.json", "item_catalog.json"):
-    _dest = os.path.join(_CONFIG_DIR, _cfg_name)
-    if not os.path.exists(_dest):
-        shutil.copy2(os.path.join(_HERE, _cfg_name), _dest)
 
 
 def _load_json(name):
     """Loads a config file, dropping any "_..." documentation keys (see
-    families.json's own "_comment")."""
-    with open(os.path.join(_CONFIG_DIR, name), encoding="utf-8") as f:
-        return {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+    families.json's own "_comment"). Re-raises with the filename attached --
+    json.JSONDecodeError's own message doesn't name the file, which matters
+    here since the caller shows it in an error dialog naming "the bad file"."""
+    path = os.path.join(_CONFIG_DIR, name)
+    try:
+        with open(path, encoding="utf-8") as f:
+            return {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+    except (OSError, ValueError) as e:
+        raise RuntimeError(f"{path}: {e}") from e
 
 
 FAMILIES, MAPS, GAMEMODES = {}, {}, {}
@@ -57,7 +64,10 @@ ITEM_CATEGORIES = {}
 
 
 def _reload_item_catalog():
-    data = _load_json("item_catalog.json")
+    # Extracted data, never hand-edited -- read straight from the bundled
+    # copy under _HERE, not seeded into _CONFIG_DIR like the other three.
+    with open(os.path.join(_HERE, "item_catalog.json"), encoding="utf-8") as f:
+        data = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
     ITEM_CATEGORIES.clear()
     ITEM_CATEGORIES.update(data.get("categories", {}))
 
@@ -72,7 +82,46 @@ def reload_configs():
     _reload_item_catalog()
 
 
-reload_configs()
+def load_config():
+    """Seeds families/maps/gamemodes.json into _CONFIG_DIR (first run), then
+    loads everything into FAMILIES/MAPS/GAMEMODES/ITEM_CATEGORIES. Called once
+    by overlay_app.py at startup, after logging is configured -- if a
+    hand-edited JSON is corrupt, json.load raises here and the caller can show
+    a real error dialog instead of the import silently killing the exe.
+
+    Re-seeding: a `.seed` file alongside each config is a copy of what _HERE's
+    bundled default looked like the last time it was seeded. Re-seeding only
+    happens when that bundled default has since changed (bundled != .seed) --
+    a merely-corrupt or hand-edited dest is deliberately left alone otherwise,
+    so json.load() below still raises on it instead of this silently "fixing"
+    it. When the bundled default DID change, dest is only overwritten as-is if
+    it still matches the old .seed (untouched by the user); otherwise it's
+    renamed to `.bak` and logged first, never silently discarded."""
+    os.makedirs(_CONFIG_DIR, exist_ok=True)
+    for _cfg_name in ("families.json", "maps.json", "gamemodes.json"):
+        _bundled = os.path.join(_HERE, _cfg_name)
+        _dest = os.path.join(_CONFIG_DIR, _cfg_name)
+        _seed = _dest + ".seed"
+        if not os.path.exists(_dest):
+            shutil.copy2(_bundled, _dest)
+            shutil.copy2(_bundled, _seed)
+        elif not os.path.exists(_seed):
+            # Migrating from before the .seed mechanism existed -- seed from
+            # the CURRENT bundled default (not the user's dest!), so a future
+            # bundled change correctly treats any difference from THIS point
+            # on as a real divergence to back up, instead of baselining on
+            # whatever hand edits the user's dest might already carry.
+            shutil.copy2(_bundled, _seed)
+        elif not filecmp.cmp(_bundled, _seed, shallow=False):
+            if filecmp.cmp(_dest, _seed, shallow=False):
+                shutil.copy2(_bundled, _dest)  # untouched by the user -- safe to update
+            else:
+                _bak = _dest + ".bak"
+                shutil.copy2(_dest, _bak)
+                shutil.copy2(_bundled, _dest)
+                logging.info(f"{_cfg_name} changed upstream and your copy had diverged -- backed up to {_bak}")
+            shutil.copy2(_bundled, _seed)
+    reload_configs()
 
 
 # --------------------------------------------------------------------------- connectivity
