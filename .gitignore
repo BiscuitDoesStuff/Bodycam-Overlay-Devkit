@@ -15,3 +15,8 @@ Thumbs.db
 # dump) -- treated confidentially, kept separate from /dev/, and never
 # committed under any circumstances.
 /DECRYPT/
+
+# The user's own local Saved-Command-Button/Plugin exports, kept for
+# personal use -- not shared community content, never committed. See
+# community/buttons/ and community/plugins/ for the shared equivalents.
+/scripts/
