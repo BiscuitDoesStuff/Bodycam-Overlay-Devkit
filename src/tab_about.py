@@ -17,6 +17,7 @@ class AboutTab(ttk.Frame):
         self.app = app
 
         ui.label(self, text="Bodycam Overlay -- Bodycam Devkit Overlay", header=True).pack(anchor="w", padx=PAD_LG, pady=(PAD_LG + 4, 0))
+        ui.label(self, text=f"Version {app.version}", muted=True).pack(anchor="w", padx=PAD_LG, pady=(0, 2))
         ui.label(self, text="A standalone external control panel for Bodycam -- "
                              "not injected into the game process.", muted=True, wraplength=600,
                  justify="left").pack(anchor="w", padx=PAD_LG, pady=(2, PAD_LG))
