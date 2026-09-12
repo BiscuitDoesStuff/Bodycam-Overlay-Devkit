@@ -4,7 +4,7 @@ from tkinter import ttk, messagebox
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import PANEL, FG, MUTED, BAD, PAD, PAD_SM
+from ui_theme import PANEL, FG, MUTED, BAD, PAD, PAD_SM, PAD_MD, PAD_XS
 from ui_common import load_ui_state, save_ui_state, make_scrollable, FILTER_DEBOUNCE_MS, set_text
 
 
@@ -40,10 +40,12 @@ class HostTab(ttk.Frame):
 
         filter_row = ui.frame(left)
         filter_row.pack(fill="x", pady=(PAD_SM, PAD_SM))
-        ui.label(filter_row, text="\U0001F50D", muted=True).pack(side="left")
+        # Plain text, not the U+1F50D magnifying-glass emoji -- that's outside
+        # the Basic Multilingual Plane and renders as a box on Tk 8.6.
+        ui.label(filter_row, text="Filter:", muted=True).pack(side="left")
         self.map_filter_var = tk.StringVar()
         filter_entry = ui.entry(filter_row, textvariable=self.map_filter_var)
-        filter_entry.pack(side="left", fill="x", expand=True, padx=(PAD_SM - 2, 0))
+        filter_entry.pack(side="left", fill="x", expand=True, padx=(PAD_XS, 0))
         filter_entry.bind("<KeyRelease>", self._on_map_filter_keyrelease)
 
         map_frame = ui.frame(left)
@@ -62,7 +64,7 @@ class HostTab(ttk.Frame):
 
         self.map_note_var = tk.StringVar()
         ui.label(left, textvariable=self.map_note_var, muted=True, wraplength=400,
-                 justify="left").pack(anchor="w", fill="x", pady=(PAD_SM - 2, 0))
+                 justify="left").pack(anchor="w", fill="x", pady=(PAD_XS, 0))
 
         ui.label(left, text="Gamemode", bold=True).pack(anchor="w", pady=(PAD, 0))
         gm_frame = ui.frame(left)
@@ -83,7 +85,7 @@ class HostTab(ttk.Frame):
 
         self.gamemode_note_var = tk.StringVar()
         ui.label(left, textvariable=self.gamemode_note_var, muted=True, wraplength=400,
-                 justify="left").pack(anchor="w", fill="x", pady=(PAD_SM - 2, 0))
+                 justify="left").pack(anchor="w", fill="x", pady=(PAD_XS, 0))
 
         row = ui.frame(left)
         row.pack(fill="x", pady=(PAD, 0))
@@ -91,19 +93,19 @@ class HostTab(ttk.Frame):
         ui.label(row, text="Cap").grid(row=0, column=0, sticky="w")
         self.cap_var = tk.IntVar(value=7)
         ui.spinbox(row, from_=1, to=64, textvariable=self.cap_var, width=6).grid(
-            row=0, column=1, sticky="w", padx=PAD_SM + 2)
+            row=0, column=1, sticky="w", padx=PAD_MD)
 
-        ui.label(row, text="Team Cap").grid(row=1, column=0, sticky="w", pady=(PAD_SM + 2, 0))
+        ui.label(row, text="Team Cap").grid(row=1, column=0, sticky="w", pady=(PAD_MD, 0))
         self.team_var = tk.IntVar(value=1)
         self.team_spin = ui.spinbox(row, from_=1, to=32, textvariable=self.team_var, width=6)
-        self.team_spin.grid(row=1, column=1, sticky="w", padx=PAD_SM + 2, pady=(PAD_SM + 2, 0))
+        self.team_spin.grid(row=1, column=1, sticky="w", padx=PAD_MD, pady=(PAD_MD, 0))
 
         self.private_var = tk.BooleanVar(value=False)
         ui.checkbutton(row, text="Private", variable=self.private_var).grid(
-            row=2, column=0, sticky="w", pady=(PAD_SM + 2, 0))
+            row=2, column=0, sticky="w", pady=(PAD_MD, 0))
         self.bots_var = tk.BooleanVar(value=True)
         ui.checkbutton(row, text="Bots", variable=self.bots_var).grid(
-            row=2, column=1, sticky="w", pady=(PAD_SM + 2, 0))
+            row=2, column=1, sticky="w", pady=(PAD_MD, 0))
 
         row.columnconfigure(1, weight=1)
 

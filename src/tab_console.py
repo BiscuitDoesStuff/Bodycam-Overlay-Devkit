@@ -4,7 +4,7 @@ from tkinter import ttk, messagebox
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import PAD, PAD_SM
+from ui_theme import PAD, PAD_MD
 from ui_common import ConsoleShellMixin, SaveButtonDialog
 
 
@@ -28,7 +28,7 @@ class ConsoleTab(ConsoleShellMixin, ttk.Frame):
 
         def extra_buttons(btn_row):
             ui.button(btn_row, "Save as Button...", kind="accent", command=self._save_as_button).pack(
-                side="left", padx=PAD_SM + 2)
+                side="left", padx=PAD_MD)
 
         self._build_input_row(height=6, default_text="return 1+1", extra_buttons=extra_buttons)
         self._build_output_area()

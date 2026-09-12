@@ -5,6 +5,7 @@ windowed or borderless mode so this window can sit visually on top of it.
 Run with:  python src/overlay_app.py
 Requires the game to be running with the ClaudeBridge UE4SS mod loaded.
 """
+import ctypes
 import logging
 import logging.handlers
 import os
@@ -21,7 +22,7 @@ from PIL import Image, ImageDraw
 import game_api as api
 import install_bridge
 import ui_theme as ui
-from ui_theme import PANEL, FG, MUTED, BAD, PAD, PAD_SM
+from ui_theme import PANEL, FG, MUTED, GOOD, BAD, PAD, PAD_SM
 
 from ui_common import AsyncRunner
 from tab_host import HostTab
@@ -46,12 +47,25 @@ logging.getLogger().addHandler(_log_handler)
 logging.getLogger().setLevel(logging.INFO)
 
 
+_MINSIZE = (680, 480)
+
+
 class App:
     def __init__(self):
+        try:
+            # Without this, Windows scales the whole window as a bitmap on
+            # a scaled display -- blurry text/UI instead of Tk rendering at
+            # the real resolution itself.
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:
+            pass
+
         self.root = tk.Tk()
         self.root.title("Bodycam Overlay")
-        self.root.geometry("1920x1080")
-        self.root.minsize(680, 480)
+        w = max(int(self.root.winfo_screenwidth() * 0.7), _MINSIZE[0])
+        h = max(int(self.root.winfo_screenheight() * 0.7), _MINSIZE[1])
+        self.root.geometry(f"{w}x{h}")
+        self.root.minsize(*_MINSIZE)
         self.root.attributes("-topmost", True)
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
         self.root.report_callback_exception = self._log_tk_exception
@@ -63,6 +77,7 @@ class App:
 
         nb = ttk.Notebook(self.root)
         nb.pack(fill="both", expand=True, padx=PAD_SM, pady=(PAD_SM, 0))
+        nb.enable_traversal()  # Ctrl+Tab / Ctrl+Shift+Tab switches tabs
         self.host_tab = HostTab(nb, self)
         self.loadout_tab = LoadoutTab(nb, self)
         self.speed_tab = SpeedTab(nb, self)
@@ -88,8 +103,12 @@ class App:
         ttk.Separator(bottom, orient="horizontal").pack(fill="x", side="top")
 
         self.status_var = tk.StringVar(value="Starting...")
-        self.status_lbl = ui.label(bottom, textvariable=self.status_var, bg=PANEL, anchor="w")
+        self.status_lbl = ui.label(bottom, textvariable=self.status_var, bg=PANEL, anchor="w", justify="left")
         self.status_lbl.pack(fill="x", side="left", expand=True, padx=(PAD, PAD_SM), pady=PAD_SM + 1)
+        # A long status message (a bridge error, a full path) used to just
+        # clip/overflow instead of wrapping -- rewrap to the label's own
+        # current width on every resize, same pattern as ui_theme.info_banner.
+        self.status_lbl.bind("<Configure>", lambda e: self.status_lbl.configure(wraplength=max(200, e.width - 4)))
 
         conn_frame = ui.frame(bottom, panel=True)
         conn_frame.pack(side="right", padx=PAD, pady=PAD_SM)
@@ -226,14 +245,9 @@ class App:
 
         def done(ok):
             self.conn_var.set("CONNECTED" if ok else "not responding")
-            # NOT fill=GOOD if ok else BAD -- GOOD and BAD both alias RED since
-            # the red/black/white rebrand (ui_theme.py), so that pairing always
-            # rendered the same color regardless of connection state, silently
-            # defeating the dot's whole purpose. FG (white) reads as "nominal"
-            # the same way it already does on the status bar text just below;
             # MUTED (this dot's own initial color, before the first poll
             # completes) stays the third, distinct "checking..." state.
-            self.conn_dot.itemconfigure(self._conn_dot_id, fill=FG if ok else BAD)
+            self.conn_dot.itemconfigure(self._conn_dot_id, fill=GOOD if ok else BAD)
             if ok and not self._first_ok:
                 # Don't fire these four tabs' refresh RPCs at startup (they'd
                 # queue up behind each other on bridge_client's one-request-at-
