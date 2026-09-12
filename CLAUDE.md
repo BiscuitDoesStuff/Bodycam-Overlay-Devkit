@@ -1,49 +1,57 @@
 # CLAUDE.md
 
-## What this project actually is
+## What
 
-A standalone desktop control panel for **Bodycam** (Unreal Engine 5.5) —
-**not** injected into the game process. It runs as its own Python/Tkinter
-application, talking to a live, running copy of the game through a UE4SS
-Lua mod bundled inside this repo. This is a **fork**: the original
-"Bodycam Overlay" was created by **clutch5.9**; this fork (**BDT Overlay
-Fork**) is maintained by **BiscuitDoesStuff** at
-github.com/BiscuitDoesStuff/BDT-Overlay-Fork, both under the MIT License
-(original copyright preserved, per the license's own requirement).
+External Tk control panel for **Bodycam** (UE5), not injected into the game
+process — talks to a bundled UE4SS Lua mod via file-based RPC. Fork of
+clutch5.9's original "Bodycam Overlay", MIT-licensed. Windows-only.
 
-Scope, deliberately: cosmetic/economy unlocks, loadout editing,
-weather/time control, and developer-cheat-menu access (self-only).
-Nothing in this repo targets or manipulates *other players'* state.
+## Run / test / build
 
-## Architecture: how this actually talks to the game
+- `python src/overlay_app.py` — starts hidden, Insert toggles the window;
+  works fine with the game closed (status shows "not responding").
+- `python tests/test_offline.py` — the only test suite; no game needed.
+- `build.bat` — installs deps, runs PyInstaller against
+  `BodycamOverlay.spec`, produces `dist/BodycamOverlay.exe`.
+- Release = bump `__version__` in `overlay_app.py` + a `CHANGELOG.md`
+  entry + tag `vX.Y.Z` (triggers `.github/workflows/release.yml`).
 
-- **UE4SS** (a Lua scripting/modding framework for Unreal Engine) is
-  installed into the game and loads a mod called **ClaudeBridge**
-  (`src/mod/ClaudeBridge/Scripts/main.lua`), which runs *inside* the game
-  process for as long as the game is open.
-- Python (`bridge_client.py`) talks to that Lua mod via a **file-based
-  RPC protocol**: write a request file, the Lua mod polls for it, executes
-  the Lua, writes a response file. One request in flight at a time (a
-  `busy` flag on the game side); `bridge_client.py` serializes concurrent
-  Python-side callers with a `threading.Lock()`.
-- `game_api.py` wraps this into higher-level Python functions
-  (`get_match_info()`, `set_currency()`, `unlock_all_items()`, etc.) that
-  `overlay_app.py`'s UI calls asynchronously (never blocking the Tk main
-  loop — see `app.runner.run(work, done, err)` used everywhere in the UI).
+## Architecture
 
-## Development conventions in this repo
+- File-based RPC: `bridge_client.py` (Python) ↔ `src/mod/ClaudeBridge/
+  Scripts/main.lua` (runs inside the game). One request in flight at a
+  time; `_send_lock` serializes concurrent Python-side callers.
+- `game_api.py` wraps every Lua call/save-file edit into a plain Python
+  function — nothing else should touch `bridge_client`/`gvas2` directly.
+- `AsyncRunner` (`ui_common.py`) runs every blocking call off the Tk main
+  thread — never block the UI thread with a live game call.
+- One `tab_*.py` module per notebook tab. `ui_theme.py`'s factories
+  (`ui.button`/`ui.label`/`ui.toplevel`/etc.) are the only way to build a
+  widget — never a raw `tk.Widget(...)` call in a tab.
 
-- **Never trust "the call didn't error" as proof of effect.** A function
-  succeeding with no Lua error is not evidence it did anything in-game —
-  always verify a real before/after value when one is available before
-  shipping a claim about what something does.
-- **Always back up before any binary save-file write** (`Loadout.sav`,
-  etc.) — automatic timestamped backups exist for exactly this reason.
-- **Guard disruptive host actions** — check the live roster first, ask
-  for confirmation if anyone besides the local player is connected,
-  before restarting rounds, changing maps, etc. (see `HostTab._guard_other_players`
-  in `tab_host.py`). Purely local/cosmetic writes (currency, unlocks,
-  own-pawn cheats) don't need this — they don't affect other players.
+## Conventions
+
+- **"No Lua error" is never proof of an effect** — verify a real
+  before/after value before claiming a function does something.
+- **Back up before any binary save-file write** (`Loadout.sav`) —
+  automatic timestamped backups exist for exactly this.
+- **Guard disruptive host actions** through `HostTab._guard_other_players`
+  (check the live roster, confirm if anyone else is connected). Purely
+  local writes (currency, unlocks, own-pawn cheats) don't need this.
+- **Any `main.lua` edit needs a full game restart** to take effect — Ctrl+R
+  hot-reload doesn't pick up a mod-file change.
 - **Commit only when explicitly asked.** Never force-push without
-  explicit, separate confirmation for that specific action. Always merge,
-  never rebase over the real repo's history.
+  separate, explicit confirmation. Always merge, never rebase.
+
+## Docs map & runtime state
+
+`README.md` — user-facing setup/features. `docs/DOCUMENTATION.md` —
+per-tab how-to, file formats, troubleshooting, runtime paths (§7).
+`docs/INTERNALS.md` — protocol/engine design notes (`§5.x`, cited from
+source comments). `CHANGELOG.md` — release history.
+
+## dev/
+
+Gitignored scratch space (`TODO.md`, research notes, test scripts).
+Promote a confirmed fact into `docs/INTERNALS.md` before it's relied on
+elsewhere, then commit — `dev/` itself never ships.
