@@ -3,14 +3,14 @@ import tkinter as tk
 from tkinter import ttk
 
 import ui_theme as ui
-from ui_theme import PAD, PAD_SM, PAD_LG
+from ui_theme import PAD, PAD_LG
 import shell_client
 from ui_common import ConsoleShellMixin
 
 
 class ShellTab(ConsoleShellMixin, ttk.Frame):
     """Runs arbitrary shell scripts locally via Git Bash -- see
-    docs/DOCUMENTATION.md §2 for the full safety rationale (no sandboxing, by
+    docs/DOCUMENTATION.md §2.7 for the full safety rationale (no sandboxing, by
     design)."""
 
     def __init__(self, parent, app):
@@ -25,23 +25,16 @@ class ShellTab(ConsoleShellMixin, ttk.Frame):
                  "same unsandboxed access as a terminal you open yourself. Use it for local "
                  "files/automation, not for touching Bodycam (that's the Console tab's job). "
                  "Alt+Up/Down replays this session's history. Full reference: "
-                 "docs/DOCUMENTATION.md §2.",
+                 "docs/DOCUMENTATION.md §2.7.",
         ).pack(fill="x", padx=PAD, pady=(PAD, 0))
 
-        self.input_box = ui.text(self, height=8)
-        self.input_box.pack(fill="x", padx=PAD, pady=(PAD_SM - 2, PAD_SM))
-        self.input_box.insert("1.0", "echo hello from bash\npwd")
-        self._bind_history_keys()
-
-        btn_row = ui.frame(self)
-        btn_row.pack(fill="x", padx=PAD)
-        ui.button(btn_row, "Run  (Ctrl+Enter)", kind="accent", command=self._run_from_input).pack(side="left")
-        ui.label(btn_row, text="Timeout (s):").pack(side="left", padx=(PAD_LG, 2))
         self.timeout_var = tk.StringVar(value="60")
-        ui.entry(btn_row, textvariable=self.timeout_var, width=6).pack(side="left")
-        ui.button(btn_row, "Clear Output", command=self._clear_output).pack(side="left", padx=PAD_SM + 2)
-        ui.label(btn_row, text="Alt+Up/Down: history", muted=True).pack(side="right")
 
+        def extra_buttons(btn_row):
+            ui.label(btn_row, text="Timeout (s):").pack(side="left", padx=(PAD_LG, 2))
+            ui.entry(btn_row, textvariable=self.timeout_var, width=6).pack(side="left")
+
+        self._build_input_row(height=8, default_text="echo hello from bash\npwd", extra_buttons=extra_buttons)
         self._build_output_area()
 
     def _run_from_input(self, _evt=None):

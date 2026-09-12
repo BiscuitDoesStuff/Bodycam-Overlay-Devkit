@@ -33,14 +33,15 @@ MUTED = "#9c9ca1"       # secondary text -- neutral grey (no color tint)
 
 RED = "#c8102e"         # the one accent color: primary actions, selection, focus
 RED_HOVER = "#d81b3a"
-RED_PRESSED = "#a10d25"
 RED_MUTED = "#7a2530"   # for a quiet destructive outline, not a full-saturation fill
 
-# Back-compat names used around the app for the two semantic button tiers --
-# both map onto the same red family now that the palette is strictly
-# red/black/white (no separate green "success" hue).
+# Status colors -- no green "success" hue in a strictly red/black/white
+# palette, so GOOD is FG (reads as "nominal", same as normal status text)
+# rather than a color of its own; BAD stays RED, the one attention-getting
+# color. Keeping these distinct (not both aliasing RED) is what lets the
+# connection dot/status text actually distinguish "connected" from "error".
 ACCENT = RED
-GOOD = RED
+GOOD = FG
 BAD = RED
 
 # --------------------------------------------------------------------------- fonts
@@ -51,8 +52,15 @@ FONT_MUTED = ("Segoe UI", 9)
 FONT_MONO = ("Consolas", 10)
 
 # --------------------------------------------------------------------------- spacing
+# XS/MD/ML fill the gaps between PAD_SM/PAD/PAD_LG that call sites were
+# already reaching for via ad hoc small +/- arithmetic on PAD_SM/PAD_LG --
+# named here so that arithmetic doesn't have to be re-derived (and
+# re-verified) at every call site.
+PAD_XS = 2
 PAD_SM = 4
+PAD_MD = 6
 PAD = 8
+PAD_ML = 10
 PAD_LG = 16
 
 # (bg, active_bg, fg) per button kind. "active_bg" only shows while the
@@ -60,7 +68,6 @@ PAD_LG = 16
 _BUTTON_COLORS = {
     "default": (INPUT, BORDER, FG),
     "accent": (RED, RED_HOVER, FG),
-    "good": (RED, RED_HOVER, FG),
 }
 
 
@@ -88,10 +95,8 @@ def apply(root):
 
     style.configure(".", background=BG, foreground=FG, font=FONT_BASE)
     style.configure("TFrame", background=BG)
-    style.configure("Card.TFrame", background=PANEL)
     style.configure("TLabel", background=BG, foreground=FG)
     style.configure("TSeparator", background=BORDER)
-    style.configure("TPanedwindow", background=BG)
 
     style.configure("TNotebook", background=BG, borderwidth=0, tabmargins=(8, 8, 8, 0))
     style.configure("TNotebook.Tab", background=PANEL, foreground=MUTED,
@@ -130,14 +135,11 @@ def apply(root):
         background=[("selected", RED)],
         foreground=[("selected", FG)],
     )
-    # Category rows use this tag (bold, muted-until-selected) to read as
-    # section headers rather than pickable items -- see HostTab._populate_map_tree.
-    style.configure("Treeview.Heading", background=PANEL, foreground=FG, borderwidth=0)
 
 
 def button(parent, text, kind="default", command=None, fg=None, width=None, outline=False, **kw):
     """A flat tk.Button, no hover animation (see module docstring). `kind`
-    picks the fill: 'default' (neutral dark) or 'accent'/'good' (solid red,
+    picks the fill: 'default' (neutral dark) or 'accent' (solid red,
     for the primary action on a screen). Pass outline=True for a destructive
     action instead (e.g. Delete/Remove) -- a quiet red-bordered button rather
     than a second competing solid color. Pass fg= to override just the text
@@ -147,7 +149,11 @@ def button(parent, text, kind="default", command=None, fg=None, width=None, outl
         border_kw = dict(highlightthickness=1, highlightbackground=RED_MUTED, highlightcolor=RED)
     else:
         bg, hover, base_fg = _BUTTON_COLORS.get(kind, _BUTTON_COLORS["default"])
-        border_kw = dict(highlightthickness=0)
+        # A RED focus ring is invisible against an already-RED (accent) fill --
+        # confirmed visually (a focused accent button showed no discernible
+        # ring) -- use FG there instead so keyboard focus stays visible.
+        focus_color = FG if bg == RED else RED
+        border_kw = dict(highlightthickness=1, highlightbackground=BORDER, highlightcolor=focus_color)
     text_fg = fg or base_fg
     return tk.Button(
         parent, text=text, command=command, width=width,
@@ -160,7 +166,18 @@ def button(parent, text, kind="default", command=None, fg=None, width=None, outl
 def label(parent, text="", muted=False, bold=False, header=False, **kw):
     font = kw.pop("font", None) or (FONT_HEADER if header else FONT_BOLD if bold else FONT_MUTED if muted else FONT_BASE)
     fg = kw.pop("fg", None) or (MUTED if muted else FG)
-    bg = kw.pop("bg", BG)
+    if "bg" in kw:
+        bg = kw.pop("bg")
+    else:
+        # Match the parent's own background instead of always defaulting to
+        # BG -- a label placed in a PANEL-background frame (ui.frame(...,
+        # panel=True)) without an explicit bg= used to render as a dark
+        # rectangle. ttk parents (Frame/Notebook/...) have no "bg" option at
+        # all, hence the fallback.
+        try:
+            bg = parent.cget("bg")
+        except tk.TclError:
+            bg = BG
     return tk.Label(parent, text=text, bg=bg, fg=fg, font=font, **kw)
 
 
@@ -192,7 +209,8 @@ def checkbutton(parent, text="", variable=None, command=None, **kw):
     return tk.Checkbutton(
         parent, text=text, variable=variable, command=command,
         bg=bg, fg=FG, selectcolor=INPUT, activebackground=bg, activeforeground=FG,
-        highlightthickness=0, bd=0, cursor="hand2", font=FONT_BASE, **kw,
+        highlightthickness=1, highlightbackground=BORDER, highlightcolor=RED,
+        bd=0, cursor="hand2", font=FONT_BASE, **kw,
     )
 
 
@@ -200,7 +218,8 @@ def radiobutton(parent, text="", variable=None, value=None, command=None, **kw):
     return tk.Radiobutton(
         parent, text=text, variable=variable, value=value, command=command,
         bg=kw.pop("bg", BG), fg=FG, selectcolor=INPUT, activebackground=BG,
-        activeforeground=FG, highlightthickness=0, bd=0, cursor="hand2", font=FONT_BASE, **kw,
+        activeforeground=FG, highlightthickness=1, highlightbackground=BORDER, highlightcolor=RED,
+        bd=0, cursor="hand2", font=FONT_BASE, **kw,
     )
 
 
@@ -230,19 +249,39 @@ def treeview(parent, **kw):
     return tv
 
 
+def toplevel(parent, title, geometry=None):
+    """Dialog window factory -- every Toplevel in this app should be built
+    through this, not tk.Toplevel(parent) directly. Besides the shared dark
+    background/title/topmost setup, this makes the dialog actually modal
+    (transient + grab_set) and closable with Escape -- previously each
+    dialog reimplemented the bag of setup calls EXCEPT modality, so a click
+    on the main window behind any of them could still reach it."""
+    win = tk.Toplevel(parent)
+    win.title(title)
+    win.configure(bg=BG)
+    win.attributes("-topmost", True)
+    if geometry:
+        win.geometry(geometry)
+    win.transient(parent)
+    win.grab_set()
+    win.bind("<Escape>", lambda e: win.destroy())
+    win.focus_set()
+    return win
+
+
 def info_banner(parent, text, title=None):
     """A quiet callout box (panel background, thin red left edge) for a short
     bit of "here's what this tab does and what to watch out for" guidance --
     used at the top of the Console/Shell/Plugins tabs, which hand the user
     raw, unsandboxed power without much else explaining what that means.
     Text rewraps automatically as the tab is resized."""
-    outer = tk.Frame(parent, bg=PANEL)
-    tk.Frame(outer, bg=RED, width=3).pack(side="left", fill="y")
-    body = tk.Frame(outer, bg=PANEL)
-    body.pack(side="left", fill="both", expand=True, padx=(PAD, PAD), pady=(PAD_SM + 2, PAD_SM + 2))
+    outer = frame(parent, panel=True)
+    frame(outer, bg=RED, width=3).pack(side="left", fill="y")
+    body = frame(outer, panel=True)
+    body.pack(side="left", fill="both", expand=True, padx=(PAD, PAD), pady=(PAD_MD, PAD_MD))
     if title:
-        tk.Label(body, text=title, bg=PANEL, fg=FG, font=FONT_BOLD, anchor="w", justify="left").pack(fill="x")
-    msg = tk.Label(body, text=text, bg=PANEL, fg=MUTED, font=FONT_MUTED, anchor="w", justify="left")
+        label(body, text=title, bold=True, anchor="w", justify="left").pack(fill="x")
+    msg = label(body, text=text, muted=True, anchor="w", justify="left")
     msg.pack(fill="x", pady=(2, 0) if title else 0)
     body.bind("<Configure>", lambda e: msg.configure(wraplength=max(200, e.width - 4)))
     return outer

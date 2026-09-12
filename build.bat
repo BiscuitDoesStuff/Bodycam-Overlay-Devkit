@@ -1,9 +1,10 @@
 @echo off
 setlocal
-REM Packages src\overlay_app.py into a standalone exe with PyInstaller.
-REM Run this again any time you (or Claude) edit the src\*.py/.json files, to
-REM regenerate dist\BodycamOverlay.exe. Run from the repo root -- paths below
-REM are relative to it.
+REM Packages src\overlay_app.py into a standalone exe with PyInstaller, using
+REM BodycamOverlay.spec as the single source of truth for what gets bundled
+REM (icon, data files, hidden imports, --onefile/--windowed) -- edit the spec
+REM file directly, not this script, to change any of that. Run from the repo
+REM root -- paths below are relative to it.
 REM
 REM Everything below runs as `python -m ...` rather than bare `pip`/
 REM `pyinstaller` commands -- on some Python installs (notably the Microsoft
@@ -24,17 +25,7 @@ if errorlevel 1 (
     goto :fail
 )
 
-python -m pip show pyinstaller >nul 2>&1
-if errorlevel 1 (
-    echo Installing PyInstaller...
-    python -m pip install pyinstaller
-    if errorlevel 1 (
-        echo Failed to install PyInstaller -- see the error above.
-        goto :fail
-    )
-)
-
-echo Installing/updating app dependencies from requirements.txt...
+echo Installing/updating dependencies from requirements.txt...
 python -m pip install -r requirements.txt
 if errorlevel 1 (
     echo pip install failed -- see the error above.
@@ -43,17 +34,7 @@ if errorlevel 1 (
 
 echo.
 echo Running PyInstaller...
-python -m PyInstaller --noconfirm --onefile --windowed --name BodycamOverlay ^
-    --add-data "src/families.json;." ^
-    --add-data "src/maps.json;." ^
-    --add-data "src/gamemodes.json;." ^
-    --add-data "src/item_catalog.json;." ^
-    --add-data "src/app_icon.ico;." ^
-    --add-data "src/mod;mod" ^
-    --add-data "src/ue4ss_bundle;ue4ss_bundle" ^
-    --hidden-import pystray._win32 ^
-    --icon "src/app_icon.ico" ^
-    src/overlay_app.py
+python -m PyInstaller --noconfirm BodycamOverlay.spec
 if errorlevel 1 (
     echo.
     echo PyInstaller failed -- see the error above.
