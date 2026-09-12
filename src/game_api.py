@@ -35,7 +35,7 @@ _GAME_ROOT_CANDIDATES = [
 # _HERE are just the initial defaults, never touched again after seeding.
 _CONFIG_DIR = os.path.join(os.environ.get("LOCALAPPDATA", _HERE), "BodycamOverlay")
 os.makedirs(_CONFIG_DIR, exist_ok=True)
-for _cfg_name in ("families.json", "maps.json", "gamemodes.json"):
+for _cfg_name in ("families.json", "maps.json", "gamemodes.json", "item_catalog.json"):
     _dest = os.path.join(_CONFIG_DIR, _cfg_name)
     if not os.path.exists(_dest):
         shutil.copy2(os.path.join(_HERE, _cfg_name), _dest)
@@ -51,13 +51,30 @@ def _load_json(name):
 FAMILIES, MAPS, GAMEMODES = {}, {}, {}
 _CONFIG_FILES = {"families.json": FAMILIES, "maps.json": MAPS, "gamemodes.json": GAMEMODES}
 
+# Real item-id -> category mapping extracted offline from the shipped
+# DT_NewShopItem.json (see item_catalog.json's own "_comment" for full
+# provenance/caveats). Shaped differently from the three flat name->info
+# maps above (nested under "categories"), so it gets its own small loader
+# instead of going through _CONFIG_FILES. Used by unlock_weapons_and_
+# attachments()/unlock_all_items() below to spray real ids instead of a
+# guessed numeric range.
+ITEM_CATEGORIES = {}
+
+
+def _reload_item_catalog():
+    data = _load_json("item_catalog.json")
+    ITEM_CATEGORIES.clear()
+    ITEM_CATEGORIES.update(data.get("categories", {}))
+
 
 def reload_configs():
-    """Re-reads families.json / maps.json / gamemodes.json from disk in place
-    (so a running overlay picks up hand edits without restarting)."""
+    """Re-reads families.json / maps.json / gamemodes.json / item_catalog.json
+    from disk in place (so a running overlay picks up hand edits without
+    restarting)."""
     for _fname, _target in _CONFIG_FILES.items():
         _target.clear()
         _target.update(_load_json(_fname))
+    _reload_item_catalog()
 
 
 reload_configs()
@@ -390,6 +407,43 @@ return cls .. '|' .. ph .. '|' .. tostring(n) .. '|' .. tostring(mx) .. '|' .. t
     }
 
 
+# Shared by get_match_info()/get_lobby_roster()/get_adversary_info() below --
+# all three read a Blueprint struct shaped like FSTR_PCInfo (a live player's
+# team/kill/death/score/rank, GUID-mangled field names matched by PREFIX
+# since only the prefix is stable across a Blueprint recompile) and used to
+# each reimplement this same field walk independently. One definition here,
+# embedded into each of those three Lua payloads (they're separate stateless
+# ClaudeBridge calls, so it can't be a Lua-side function registered once --
+# this just keeps there being exactly one Python-side source of truth for
+# what "the safe PCInfo fields" means, instead of three copies that could
+# drift). `prefix` distinguishes get_match_info()'s "my_team"/"my_kills"
+# style (reading the local player) from get_lobby_roster()/
+# get_adversary_info()'s unprefixed "team"/"kills" style (reading someone
+# else) -- same field names otherwise. Deliberately only reads plain
+# ints/strings -- see each caller's own docstring for why the PC/Character/
+# SteamID/SkinInfo/BadgeInfo fields and KillInfo are never touched beyond
+# this (a real crash, confirmed live, not caution for its own sake).
+_PC_FIELDS_LUA_HELPER = r"""
+local function extract_pc_fields(t, out, prefix)
+    for k, v in pairs(t) do
+        if k:find('^Team_') then
+            out[#out+1] = prefix .. 'team=' .. tostring(v)
+        elseif k:find('^Stats_') and type(v) == 'table' then
+            for sk, sv in pairs(v) do
+                if sk:find('^Kill_') then out[#out+1] = prefix .. 'kills=' .. tostring(sv)
+                elseif sk:find('^Death_') then out[#out+1] = prefix .. 'deaths=' .. tostring(sv)
+                elseif sk:find('^Score_') then out[#out+1] = prefix .. 'score=' .. tostring(sv)
+                elseif sk:find('^RankName_') then
+                    local ok, rn = pcall(function() return sv:ToString() end)
+                    out[#out+1] = prefix .. 'rank=' .. (ok and rn or 'n/a')
+                end
+            end
+        end
+    end
+end
+"""
+
+
 def force_round_end(timeout=15):
     lua = r"""
 local gs = (FindAllOf('GameStateBase') or {})[1]
@@ -442,7 +496,7 @@ def get_match_info(timeout=15):
     PC/Character/SteamID/SkinInfo/BadgeInfo fields from this struct -- see
     the Lua comment inline for why (a real crash, not caution for its own
     sake)."""
-    lua = r"""
+    lua = _PC_FIELDS_LUA_HELPER + r"""
 local function safe_out(fn, field, needs_tostring)
     local t = {}
     local ok = pcall(function() fn(t) end)
@@ -468,33 +522,12 @@ out[#out+1] = 'host_migrating=' .. safe_out(function(t) gm:IsHostMigrating(t) en
 out[#out+1] = 'server_steam_id=' .. safe_out(function(t) gm:GetServerSteamID(t) end, 'SteamID', true)
 
 -- GetPcInfo (Lobby-only, like the three above) hands back the local player's
--- own FSTR_PCInfo -- a Blueprint struct with GUID-mangled field names.
--- Matched by name PREFIX, not
--- the full mangled name, since only the prefix is stable across a Blueprint
--- recompile. Deliberately only reads plain ints/strings -- the PC/Character/
--- SkinInfo/BadgeInfo fields are UObject pointers or DataTableRowHandles that
--- are NEVER touched beyond this, because calling further reflection methods
--- (GetFName, equality, etc.) on a UObject pulled out of a struct this way
--- crashed the game during this feature's own development. KillInfo (a nested array
--- inside Stats) is skipped for the same reason plus its numeric keys.
+-- own FSTR_PCInfo -- see _PC_FIELDS_LUA_HELPER's own comment for the field
+-- allowlist/exclusions this shares with get_lobby_roster()/get_adversary_info().
 local pcOk, pcErr = pcall(function()
     local t = {}
     gm:GetPcInfo(t)
-    for k, v in pairs(t) do
-        if k:find('^Team_') then
-            out[#out+1] = 'my_team=' .. tostring(v)
-        elseif k:find('^Stats_') and type(v) == 'table' then
-            for sk, sv in pairs(v) do
-                if sk:find('^Kill_') then out[#out+1] = 'my_kills=' .. tostring(sv)
-                elseif sk:find('^Death_') then out[#out+1] = 'my_deaths=' .. tostring(sv)
-                elseif sk:find('^Score_') then out[#out+1] = 'my_score=' .. tostring(sv)
-                elseif sk:find('^RankName_') then
-                    local ok3, rn = pcall(function() return sv:ToString() end)
-                    out[#out+1] = 'my_rank=' .. (ok3 and rn or 'n/a')
-                end
-            end
-        end
-    end
+    extract_pc_fields(t, out, 'my_')
 end)
 if not pcOk then out[#out+1] = 'my_team=n/a' end
 
@@ -564,7 +597,7 @@ def get_lobby_roster(timeout=15):
     against reality the first time it actually runs with 2+ connected
     players, and correct the flattening assumption above if the real shape
     turns out to be different."""
-    lua = r"""
+    lua = _PC_FIELDS_LUA_HELPER + r"""
 local gm = (FindAllOf('GameModeBase') or {})[1]
 if not gm then return 'NOGM' end
 local out = {}
@@ -574,21 +607,7 @@ pcall(function()
     for i, entry in ipairs(t) do
         if type(entry) == 'table' then
             local fields = {}
-            for k, v in pairs(entry) do
-                if k:find('^Team_') then
-                    fields[#fields+1] = 'team=' .. tostring(v)
-                elseif k:find('^Stats_') and type(v) == 'table' then
-                    for sk, sv in pairs(v) do
-                        if sk:find('^Kill_') then fields[#fields+1] = 'kills=' .. tostring(sv)
-                        elseif sk:find('^Death_') then fields[#fields+1] = 'deaths=' .. tostring(sv)
-                        elseif sk:find('^Score_') then fields[#fields+1] = 'score=' .. tostring(sv)
-                        elseif sk:find('^RankName_') then
-                            local ok2, rn = pcall(function() return sv:ToString() end)
-                            fields[#fields+1] = 'rank=' .. (ok2 and rn or 'n/a')
-                        end
-                    end
-                end
-            end
+            extract_pc_fields(entry, fields, '')
             out[#out+1] = tostring(i) .. '|' .. table.concat(fields, ',')
         end
     end
@@ -742,10 +761,17 @@ def set_invincible(timeout=15):
     have NO actual effect -- taking damage afterward was not prevented.
     Kept here (not removed) since it's still a harmless, error-free call,
     but do not expect it to do anything. `UCheatManager:God()` (the plain
-    Unreal Engine base-class cheat, not Bodycam-specific) was tried as an
-    alternative and also succeeds with no error; whether it actually
-    grants invincibility where this one doesn't has not yet been
-    independently confirmed either."""
+    Unreal Engine base-class cheat, not Bodycam-specific) was also tried,
+    with continuous health polling through the fall triggered by the
+    now-removed `CheatTeleportAbove` cheat (confirmed live 2026-09-09,
+    see dev/RESEARCH_NOTES.md for the full investigation) -- health
+    dropped to -498 and the pawn's identity changed (a real
+    death+respawn) on the exact same timeline as with no God() call at
+    all. Confirmed NOT to prevent that death path. The fixed ~-500 value
+    (not a gradual/proportional drop) suggests a direct instant-kill/
+    out-of-bounds check rather than normal TakeDamage(), which would
+    explain why neither cheat's invincibility
+    has any effect on it."""
     _cheat("CheatSetInvincible", timeout)
 
 
@@ -756,13 +782,6 @@ def set_infinite_ammo(timeout=15):
     afterward. Kept here (not removed) since it's still a harmless,
     error-free call, but do not expect it to do anything."""
     _cheat("CheatInfiniteAmmo", timeout)
-
-
-def teleport_above(timeout=15):
-    """CheatManager:CheatTeleportAbove() -- confirmed live the call
-    succeeds; the name is unambiguous but the actual teleport wasn't
-    independently confirmed by checking the pawn's location before/after."""
-    _cheat("CheatTeleportAbove", timeout)
 
 
 def disable_perk_cooldown(timeout=15):
@@ -831,7 +850,7 @@ def get_adversary_info(timeout=15):
     someone else is or isn't present -- cross-check against
     get_player_roster()'s count for that instead. Only returns None if the
     call itself errors, which hasn't been observed."""
-    lua = r"""
+    lua = _PC_FIELDS_LUA_HELPER + r"""
 local pc = UEHelpers.GetPlayerController()
 local t = {}
 local ok = pcall(function() pc.CheatManager:GetRandomAdversary(t) end)
@@ -841,21 +860,7 @@ for _ in pairs(t) do hasAny = true break end
 if not hasAny then return 'NONE' end
 
 local out = {}
-for k, v in pairs(t) do
-    if k:find('^Team_') then
-        out[#out+1] = 'team=' .. tostring(v)
-    elseif k:find('^Stats_') and type(v) == 'table' then
-        for sk, sv in pairs(v) do
-            if sk:find('^Kill_') then out[#out+1] = 'kills=' .. tostring(sv)
-            elseif sk:find('^Death_') then out[#out+1] = 'deaths=' .. tostring(sv)
-            elseif sk:find('^Score_') then out[#out+1] = 'score=' .. tostring(sv)
-            elseif sk:find('^RankName_') then
-                local ok2, rn = pcall(function() return sv:ToString() end)
-                out[#out+1] = 'rank=' .. (ok2 and rn or 'n/a')
-            end
-        end
-    end
-end
+extract_pc_fields(t, out, '')
 return table.concat(out, '\n')
 """
     body = bc.run_lua(lua, timeout=timeout).strip()
@@ -1257,10 +1262,20 @@ def _list_backup_filenames():
 def backup_save(keep=20):
     """Copies Loadout.sav to a timestamped .backup-<ts> file alongside it, then
     prunes down to the `keep` most recent backups so these don't accumulate
-    forever (see docs/DOCUMENTATION.md §5.2)."""
+    forever (see docs/DOCUMENTATION.md §5.2). The timestamp is second-
+    resolution, so a `-2`/`-3`/... suffix is appended whenever that exact
+    filename is already taken (confirmed to happen in practice -- three
+    _apply_verified() calls in a fast test run all landed in the same
+    second and would otherwise have silently overwritten the same backup
+    slot, each save() call's real "before this edit" state clobbering the
+    previous one's instead of each being individually recoverable)."""
     import shutil, time
     ts = time.strftime("%Y%m%d-%H%M%S")
     dst = SAVE_PATH + f".backup-{ts}"
+    n = 2
+    while os.path.exists(dst):
+        dst = SAVE_PATH + f".backup-{ts}-{n}"
+        n += 1
     shutil.copy2(SAVE_PATH, dst)
     names = _list_backup_filenames()
     for old in names[:-keep] if keep > 0 else names:
@@ -1271,6 +1286,9 @@ def backup_save(keep=20):
     return dst
 
 
+_BACKUP_TS_RE = re.compile(r"^(\d{8}-\d{6})(?:-(\d+))?$")
+
+
 def list_backups():
     """Available Loadout.sav backups, newest first, as (display_label, full_path)."""
     import time
@@ -1278,9 +1296,16 @@ def list_backups():
     out = []
     for fname in reversed(_list_backup_filenames()):
         ts = fname[len(_BACKUP_PREFIX):]
-        try:
-            label = time.strftime("%Y-%m-%d %H:%M:%S", time.strptime(ts, "%Y%m%d-%H%M%S"))
-        except ValueError:
+        m = _BACKUP_TS_RE.match(ts)
+        if m:
+            base_ts, dup_n = m.groups()
+            try:
+                label = time.strftime("%Y-%m-%d %H:%M:%S", time.strptime(base_ts, "%Y%m%d-%H%M%S"))
+                if dup_n:
+                    label += f" (#{dup_n})"
+            except ValueError:
+                label = ts
+        else:
             label = ts
         out.append((label, os.path.join(d, fname)))
     return out
@@ -1293,33 +1318,137 @@ def restore_backup(backup_path):
     shutil.copy2(backup_path, SAVE_PATH)
 
 
-def set_operator(loadout_idx, operator_name):
+def _snapshot_loadouts(path):
+    """Full structural snapshot of every loadout in `path`, as plain
+    lists/strings (no gvas2 region objects, so two snapshots can be compared
+    with plain ==). Same shape dump_loadout()/dump_all_loadouts() expose
+    publicly, just including attachments too (which those two intentionally
+    leave out) since a write-verification pass needs the complete picture,
+    not just the two fields the UI displays."""
+    d, regs, rows, L = gvas2.slots(path)
+
+    def names(region):
+        return [k["value"] for k in gvas2.row_in(rows, region)] if region else []
+
+    return [
+        {
+            "operator": names(lo["op"]),
+            "slots": [
+                {"bundle": names(s["bundle"]), "weapon": names(s["weapon"]),
+                 "attachments": names(s["attachments"])}
+                for s in lo["slots"]
+            ],
+        }
+        for lo in L
+    ]
+
+
+def _apply_verified(edit_fn, expect_fn):
+    """Applies a save-file edit safely: backs up the live file, edits a
+    throwaway COPY (never SAVE_PATH directly), re-parses that copy and
+    asserts it matches exactly what the edit was supposed to produce, checks
+    the live file hasn't changed on disk since this started (e.g. the game
+    itself autosaving mid-edit), then atomically installs the verified copy
+    over the live file and re-checks the installed result one last time.
+    SAVE_PATH is only ever touched by the final atomic os.replace() -- if
+    anything above fails, the real file is untouched and the original
+    exception propagates (backup_save() already ran, so it's always
+    recoverable even in that case).
+
+    edit_fn(path) -- performs the actual gvas2 writes against `path`
+        (a copy of the live save, never SAVE_PATH itself).
+    expect_fn(before) -- takes _snapshot_loadouts(SAVE_PATH) as taken BEFORE
+        any edit, returns the full snapshot the edit is supposed to produce.
+
+    Modeled on the same round-trip-verify-before-install discipline a
+    related tool's save-file worker uses (write to a copy, re-parse and
+    diff against the expected result, confirm the live file didn't move
+    underneath you, then swap in atomically) -- see
+    dev/DECRYPTED_DATA_CAPABILITIES.md-adjacent research for where that
+    pattern came from. Previously this app wrote directly and incrementally
+    to the live file across multiple gvas2 calls with only a pre-edit backup
+    as a safety net; a mid-edit crash could leave Loadout.sav partially
+    updated (e.g. bundle changed but not weapon). This closes that gap."""
     backup_save()
-    return gvas2.set_row_in_region(SAVE_PATH, lambda L, i=loadout_idx: L[i]["op"], operator_name)
+    original_bytes = open(SAVE_PATH, "rb").read()
+    before = _snapshot_loadouts(SAVE_PATH)
+    candidate = SAVE_PATH + ".pending"
+    shutil.copy2(SAVE_PATH, candidate)
+    try:
+        edit_fn(candidate)
+        expected = expect_fn(before)
+        actual = _snapshot_loadouts(candidate)
+        if actual != expected:
+            raise AssertionError(
+                f"Candidate edit did not match the expected result -- live save left untouched.\n"
+                f"expected: {expected}\nactual:   {actual}"
+            )
+        if open(SAVE_PATH, "rb").read() != original_bytes:
+            raise AssertionError(
+                "Loadout.sav changed on disk during this edit (likely the game itself saving) "
+                "-- live save left untouched, retry after leaving the loadout editor."
+            )
+        os.replace(candidate, SAVE_PATH)
+        installed = _snapshot_loadouts(SAVE_PATH)
+        if installed != expected:
+            raise AssertionError("Installed save differs from the verified candidate -- should be impossible.")
+    finally:
+        if os.path.exists(candidate):
+            try:
+                os.remove(candidate)
+            except OSError:
+                pass
+
+
+def set_operator(loadout_idx, operator_name):
+    def edit(path):
+        gvas2.set_row_in_region(path, lambda L, i=loadout_idx: L[i]["op"], operator_name)
+
+    def expect(before):
+        expected = json.loads(json.dumps(before))  # cheap deep copy, save snapshots are plain JSON-safe types
+        expected[loadout_idx]["operator"] = [operator_name]
+        return expected
+
+    _apply_verified(edit, expect)
 
 
 def set_slot_weapon(loadout_idx, slot_idx, weapon_item_name, bundle_name=None, attachments=None):
     """Set a loadout slot's weapon (+ bundle, + optionally a couple of attachment rows).
     bundle_name defaults to the reverse-lookup from families.json."""
-    backup_save()
     if bundle_name is None:
         bundle_name = find_bundle_for_weapon(weapon_item_name)
         if bundle_name is None:
             raise ValueError(f"don't know the bundle for '{weapon_item_name}' -- pass bundle_name explicitly")
-
-    gvas2.set_row_in_region(SAVE_PATH, lambda L, i=loadout_idx, s=slot_idx: L[i]["slots"][s]["bundle"], bundle_name)
-    gvas2.set_row_in_region(SAVE_PATH, lambda L, i=loadout_idx, s=slot_idx: L[i]["slots"][s]["weapon"], weapon_item_name)
-
     if attachments is None:
         attachments = get_default_attachments_for(bundle_name)
-    for att in attachments:
-        d, regs, rows, L = gvas2.slots(SAVE_PATH)
-        att_region = L[loadout_idx]["slots"][slot_idx]["attachments"]
-        ks = gvas2.row_in(rows, att_region)
-        idx = attachments.index(att)
-        if idx < len(ks):
-            gvas2.set_rowname(SAVE_PATH, ks[idx]["str_off"], ks[idx]["value"], att)
 
+    def edit(path):
+        gvas2.set_row_in_region(path, lambda L, i=loadout_idx, s=slot_idx: L[i]["slots"][s]["bundle"], bundle_name)
+        gvas2.set_row_in_region(path, lambda L, i=loadout_idx, s=slot_idx: L[i]["slots"][s]["weapon"], weapon_item_name)
+        for att in attachments:
+            d, regs, rows, L = gvas2.slots(path)
+            att_region = L[loadout_idx]["slots"][slot_idx]["attachments"]
+            ks = gvas2.row_in(rows, att_region)
+            idx = attachments.index(att)
+            if idx < len(ks):
+                gvas2.set_rowname(path, ks[idx]["str_off"], ks[idx]["value"], att)
+
+    def expect(before):
+        expected = json.loads(json.dumps(before))
+        slot = expected[loadout_idx]["slots"][slot_idx]
+        slot["bundle"] = [bundle_name]
+        slot["weapon"] = [weapon_item_name]
+        # Mirrors edit()'s own logic exactly: only the first len(existing
+        # attachment rows) entries in `attachments` actually get written
+        # (set_rowname replaces an existing row, it can't add new ones), any
+        # attachment beyond that count is silently skipped, same as before.
+        existing_count = len(slot["attachments"])
+        for i, att in enumerate(attachments):
+            if i < existing_count:
+                slot["attachments"][i] = att
+        return expected
+
+    _apply_verified(edit, expect)
     return True
 
 
@@ -1432,10 +1561,13 @@ def unlock_items(item_ids, timeout=20):
 
     `item_ids` that don't correspond to a real catalog item are harmless --
     confirmed live (2000 was in that same batch and produced no error, crash,
-    or visible effect on its own). This is what makes unlock_all_items()
-    below a reasonable approach despite there being no safe way to read the
-    real catalog's id list (see CAPABILITIES.md -- every DataTable row-read
-    path tried for this crashed the game).
+    or visible effect on its own). Live DataTable row-reading crashed the
+    game when tried directly (see CAPABILITIES.md); unlock_all_items() and
+    unlock_weapons_and_attachments() below sidestep that by reading the real
+    id list offline instead, from the same table decrypted from the game's
+    own pak files (item_catalog.json) -- this harmlessness guarantee is what
+    made the old blind-range-spray approach safe before that existed, and
+    is now just a safety net for the (should be zero) case of a stale id.
 
     Like set_currency() on the same GameInstance, this is a live-session
     override, not a permanent save: confirmed by the app's maintainer that
@@ -1477,41 +1609,38 @@ return 'done'
     bc.run_lua(lua, timeout=timeout)
 
 
-def unlock_all_items(max_id=3250, timeout=60):
-    """Sprays every integer from 1 to max_id into PlayerInventoryItems in one
-    batched call. There is no known safe way to read the real catalog's
-    actual id list (DT_NewShopItem has 2131 rows; both DataTable row-reading
-    approaches tried crashed the game live -- see CAPABILITIES.md), so this
-    blindly covers a plausible range instead of a precise one. Confirmed
-    real ids seen so far (128, 281, 1006, 1013, plus at least 3 more
-    somewhere in the 2026-09-07 test batch) all fall well under 3000; the
-    default (3250, raised from an initial 3000 per the app maintainer's own
-    request) leaves some headroom above that. Raise max_id further if a
-    future game update adds items past this range. ids that don't
-    correspond to anything real are inert (confirmed live, see
-    unlock_items()'s docstring) -- the only real cost of a larger max_id is
-    a slightly bigger one-time Lua loop, not risk."""
-    unlock_items(range(1, int(max_id) + 1), timeout=timeout)
-
-
-# The id/category boundary below is an INFERENCE, not a confirmed fact -- there
-# is no safe way to read an item's real category (see the DataTable-read
-# crashes in CAPABILITIES.md). It's based on a sample of exactly 4 confirmed
-# -real ids: two weapon skins (128, 281, both < 1000) and two non-weapon items
-# (1006 badge, 1013 skin, both >= 1000). Treat this as a best-effort filter,
-# not a precise one -- it will likely also sweep up some non-weapon items
-# that happen to live under 1000, and will miss any real weapon/attachment id
-# that happens to be 1000 or higher.
-_WEAPON_ID_CEILING = 999
+def unlock_all_items(timeout=60):
+    """Unlocks every real item in the shop catalog -- the exact id list from
+    item_catalog.json (all 4 categories combined, 2131 real ids extracted
+    offline from the shipped DT_NewShopItem.json), not a guessed numeric
+    range. Previously sprayed every integer 1..max_id (default 3250) because
+    there was no known safe way to read the real catalog's id list live
+    (DataTable row-reading crashed the game -- see CAPABILITIES.md); that's
+    no longer necessary since the same table is now readable offline with
+    zero live-game risk (see item_catalog.json's own "_comment"). This is
+    strictly better than the old range spray: real ids actually run 1-4495,
+    not a clean range, so raising max_id further would still have missed
+    them, and it's also a smaller batch (2131 ids vs. up to 3250) since
+    nothing between real ids gets sprayed anymore. ids that don't correspond
+    to anything real are inert regardless (confirmed live, see
+    unlock_items()'s docstring)."""
+    all_ids = sorted({i for ids in ITEM_CATEGORIES.values() for i in ids})
+    unlock_items(all_ids, timeout=timeout)
 
 
 def unlock_weapons_and_attachments(timeout=60):
-    """Best-effort "guns and attachments only" unlock -- sprays ids 1 through
-    _WEAPON_ID_CEILING (999) into PlayerInventoryItems, instead of the full
-    catalog range unlock_all_items() covers. See _WEAPON_ID_CEILING's comment
-    just above for exactly how thin the evidence behind that cutoff is (4
-    known ids, not a read category field) -- this is a reasonable guess, not
-    a verified weapons-only filter. Same underlying mechanism as
-    unlock_all_items() otherwise (a plain TSet spray, ids that don't
-    correspond to anything real are harmless)."""
-    unlock_all_items(max_id=_WEAPON_ID_CEILING, timeout=timeout)
+    """"Guns and attachments only" unlock -- sprays exactly the
+    item_catalog.json "DT_WeaponSkins" id list (1507 real ids), which is the
+    game's own grouping (every row in DT_NewShopItem whose AssociatedItemSkinRow
+    points at DT_WeaponSkins -- weapons and their attachments/magazines
+    together, confirmed by inspecting real rows, e.g. "Magazine Operator
+    Black Shadow" lands in this same table), not an inferred numeric cutoff.
+    Replaces the old ids-1-to-999 guess: verified against the same 4
+    previously-confirmed real ids (128/281 land in DT_WeaponSkins, 1006/1013
+    don't, matching what live testing already established), and catches
+    1,116 real weapon/attachment ids that guess entirely missed because
+    they're >= 1000 (74% of the real total -- ids are interleaved across
+    categories, not grouped in blocks). Same underlying mechanism otherwise
+    (a plain TSet spray via unlock_items(), ids that don't correspond to
+    anything real are harmless)."""
+    unlock_items(ITEM_CATEGORIES.get("DT_WeaponSkins", []), timeout=timeout)

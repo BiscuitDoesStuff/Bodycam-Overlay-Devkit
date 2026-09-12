@@ -52,10 +52,9 @@ class LoadoutTab(ttk.Frame):
                  "boost currency above, then buy the item for real in the in-game Shop "
                  "-- a real purchase sticks even though the currency number itself "
                  "resets; only the unlock buttons' own writes don't. "
-                 "\"Unlock All Items\" sprays "
-                 "every id in a plausible "
-                 "range rather than a precise catalog list (there's no safe way to read "
-                 "the real one); ids that don't "
+                 "\"Unlock All Items\" and \"Unlock Guns & Attachments\" spray the real "
+                 "catalog id list extracted from the game's own shop data (item_catalog.json), "
+                 "not a guessed range; ids that don't "
                  "correspond to a real item are harmless.",
         ).pack(fill="x", padx=PAD, pady=(PAD, 0))
 
@@ -293,17 +292,17 @@ class LoadoutTab(ttk.Frame):
     def _unlock_all_items(self):
         if not messagebox.askyesno(
                 "Unlock All Items",
-                "This sprays every item id from 1-3250 into your live inventory "
-                "ownership list. It's a blunt sweep, not a precise catalog list -- "
-                "see the banner above. Confirmed: this resets on a game restart, "
+                "This adds every real item in the shop catalog (2131 ids, extracted "
+                "from the game's own DT_NewShopItem data) to your live inventory "
+                "ownership list. Confirmed: this resets on a game restart, "
                 "same as the currency override -- re-run it each session you want "
                 "it in. There's also no undo button for this in the UI.\n\n"
                 "Proceed?"):
             return
-        self.app.status("Unlocking all items (1-3250)...")
+        self.app.status("Unlocking all items...")
 
         def work():
-            return api.unlock_all_items(max_id=3250)
+            return api.unlock_all_items()
 
         def done(_result):
             self.app.status("Unlock sweep complete -- check the in-game Locker/Shop.")
@@ -313,18 +312,15 @@ class LoadoutTab(ttk.Frame):
     def _unlock_weapons(self):
         if not messagebox.askyesno(
                 "Unlock Guns & Attachments",
-                "This sprays item ids 1-999 only, instead of the full 1-3250 range "
-                "\"Unlock All Items\" covers. This is a BEST-EFFORT guess, not a "
-                "precise weapons-only filter -- there's no safe way to read an "
-                "item's real category. The cutoff "
-                "is inferred from just 4 known ids: two real weapon skins (128, 281) "
-                "were both under 1000, two real non-weapon items (a badge and an "
-                "operator skin) were both 1000+. It will likely also unlock some "
-                "non-weapon items under 1000, and will miss any weapon/attachment id "
-                "that happens to be 1000 or higher.\n\n"
+                "This adds exactly the weapon and attachment items (1507 ids, the "
+                "game's own DT_WeaponSkins grouping in DT_NewShopItem -- weapons and "
+                "their attachments/magazines together) to your live inventory "
+                "ownership list, skipping operator skins, badges, and charms. "
+                "Confirmed: this resets on a game restart, same as \"Unlock All "
+                "Items\" -- re-run it each session you want it in.\n\n"
                 "Proceed?"):
             return
-        self.app.status("Unlocking guns & attachments (1-999)...")
+        self.app.status("Unlocking guns & attachments...")
 
         def work():
             return api.unlock_weapons_and_attachments()

@@ -10,3 +10,8 @@ Thumbs.db
 # (src/, docs/, etc.) and commit those specifically once confirmed/finished;
 # don't commit this folder wholesale.
 /dev/
+
+# Game decryption material (AES key, decryption tooling, decrypted asset
+# dump) -- treated confidentially, kept separate from /dev/, and never
+# committed under any circumstances.
+/DECRYPT/

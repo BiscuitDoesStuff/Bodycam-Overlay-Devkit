@@ -6,11 +6,17 @@ GitHub-synced snapshot of these files). If you're in a chat-only session,
 everything here is current **as of the last "Sync now" click** on the
 Project, not live.
 
-This repo holds the **official, shipped application only**. Active
-development, experimental findings, and research notes are kept locally
-and are not published here — don't expect a running log of "what was
-tried and what happened" in this repo; expect the current, working state
-of the app plus documentation of what it actually does.
+**This is the Development copy** (`Bodycam Overlay - Development`), where
+active work actually happens — it has a `dev/` folder (`TODO.md`,
+`RESEARCH_NOTES.md`, `UE_ENGINE_AND_REFLECTION.md`, plus test scripts) that
+*is* exactly the kind of running "what was tried and what happened" log.
+There's a sibling repo, `Bodycam Overlay - Pushed`, which mirrors this one's
+`src/`/`docs/`/README but deliberately excludes `dev/` (gitignored here,
+absent there) — that's the public-facing snapshot meant to hold shipped
+state only. If you're reading this exact paragraph from a sync of the
+*Pushed* repo instead, disregard it: that copy genuinely has no `dev/` and
+the "official, shipped only" framing below applies to it directly, not as
+something to reconcile with a `dev/` folder it doesn't have.
 
 ## What this project actually is
 
@@ -33,9 +39,19 @@ Nothing in this repo targets or manipulates *other players'* state.
 README.md                 User-facing feature list and setup instructions
 CLAUDE.md                  This file
 LICENSE                    MIT (original clutch5.9 copyright preserved)
+requirements.txt           Python dependencies
+build.bat, BodycamOverlay.spec
+                            PyInstaller packaging (two copies of the same
+                            --add-data/datas list -- keep both in sync)
+start.bat                   Path-independent `python src/overlay_app.py`
+                            shortcut (%~dp0-relative, works from any clone)
 docs/DOCUMENTATION.md       Console/Shell/Plugins reference, troubleshooting,
                             internals notes
 community/                  Shared Saved-Command-Button and Plugin exports
+dev/                         Development-copy-only (gitignored, absent from
+                            the Pushed repo): TODO.md, RESEARCH_NOTES.md,
+                            UE_ENGINE_AND_REFLECTION.md, plus test scripts
+                            (smoke_test.py, tab_testing.py, run_testing_tab.py)
 src/
   overlay_app.py            Entry point -- App class, tray icon, single-
                             instance lock, __main__. One file per tab lives
@@ -51,6 +67,10 @@ src/
   game_api.py                High-level API: live Lua calls + save-file edits
   bridge_client.py           Talks to the ClaudeBridge UE4SS mod (file-based RPC)
   gvas2.py                   Loadout.sav binary format reader/writer
+  families.json, maps.json,
+  gamemodes.json, item_catalog.json
+                              Hand-curated/extracted config, seeded into
+                            %LOCALAPPDATA%\BodycamOverlay\ on first run
   mod/ClaudeBridge/           The UE4SS Lua mod this whole app talks to
   ue4ss_bundle/                A full bundled copy of RE-UE4SS (MIT-licensed)
 ```
@@ -88,9 +108,10 @@ src/
   not permanent — a real Shop purchase made while boosted is the one path
   to a permanent unlock).
 - **Game Speed** — Slomo presets/custom value. **Player Cheats**: Kill
-  Self / Invincible / Infinite Ammo / Teleport Above (Kill Self,
-  Invincible, and Infinite Ammo are known, confirmed non-functional —
-  kept as harmless no-ops rather than removed). **Perk/Gadget Cooldown**:
+  Self / Invincible / Infinite Ammo (known, confirmed non-functional —
+  kept as harmless no-ops rather than removed; Teleport Above was removed
+  entirely after live testing confirmed it reliably kills the player with
+  no known fix). **Perk/Gadget Cooldown**:
   a genuinely working feature — "Clear Cooldown Now" and an "Auto-Clear
   every N sec" timer, since the effect must be reapplied for every new
   cooldown instance rather than being a one-time toggle.
@@ -118,9 +139,12 @@ src/
 - **Commit only when explicitly asked.** Never force-push without
   explicit, separate confirmation for that specific action. Always merge,
   never rebase over the real repo's history.
-- **This repo holds official, shipped state only.** Active development,
-  in-progress experiments, and research notes belong outside this repo —
-  don't add a running research log or scratchpad material here.
+- **This is the Development copy** (see the top of this file) -- `dev/` is
+  exactly where active development, in-progress experiments, and research
+  notes belong, and already holds them (`TODO.md`, `RESEARCH_NOTES.md`).
+  It's gitignored so none of it reaches the Pushed repo; treat that
+  exclusion, not this file's location, as the actual shipped/not-shipped
+  boundary.
 
 ## For a chat-only (Claude.ai Project) session specifically
 

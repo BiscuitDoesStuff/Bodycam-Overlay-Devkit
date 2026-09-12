@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw
 import game_api as api
 import install_bridge
 import ui_theme as ui
-from ui_theme import PANEL, FG, MUTED, GOOD, BAD, PAD, PAD_SM
+from ui_theme import PANEL, FG, MUTED, BAD, PAD, PAD_SM
 
 from ui_common import AsyncRunner
 from tab_host import HostTab
@@ -47,7 +47,7 @@ class App:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Bodycam Overlay")
-        self.root.geometry("840x760")
+        self.root.geometry("1920x1080")
         self.root.minsize(680, 480)
         self.root.attributes("-topmost", True)
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
@@ -196,7 +196,14 @@ class App:
 
         def done(ok):
             self.conn_var.set("CONNECTED" if ok else "not responding")
-            self.conn_dot.itemconfigure(self._conn_dot_id, fill=GOOD if ok else BAD)
+            # NOT fill=GOOD if ok else BAD -- GOOD and BAD both alias RED since
+            # the red/black/white rebrand (ui_theme.py), so that pairing always
+            # rendered the same color regardless of connection state, silently
+            # defeating the dot's whole purpose. FG (white) reads as "nominal"
+            # the same way it already does on the status bar text just below;
+            # MUTED (this dot's own initial color, before the first poll
+            # completes) stays the third, distinct "checking..." state.
+            self.conn_dot.itemconfigure(self._conn_dot_id, fill=FG if ok else BAD)
             self.root.after(5000, self._poll_connection)
 
         self.runner.run(work, done, lambda e: self.root.after(5000, self._poll_connection))

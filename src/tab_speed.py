@@ -71,17 +71,16 @@ class SpeedTab(ttk.Frame):
         # above already does: pc.CheatManager:SomeFunction(). Self-only, so
         # unlike Host tab's Match Control section these don't go through
         # _guard_other_players -- none of them force anything on anyone else.
-        # See game_api.py's kill_self/set_invincible/set_infinite_ammo/
-        # teleport_above docstrings for exactly what was independently
-        # confirmed live vs. just "the call didn't error."
+        # See game_api.py's kill_self/set_invincible/set_infinite_ammo
+        # docstrings for exactly what was independently confirmed live
+        # vs. just "the call didn't error."
         ui.label(self, text="Player Cheats", header=True).pack(anchor="w", padx=PAD, pady=(0, PAD_SM))
         ui.info_banner(
             self, title="Kill Self / Invincible / Infinite Ammo confirmed NOT working",
             text="All three calls succeed with no error, but real-gameplay testing confirmed "
                  "they have no actual effect -- self didn't die, damage wasn't prevented, ammo "
                  "wasn't infinite. Left in the UI since they're harmless, not removed, but don't "
-                 "expect anything to happen. Teleport Above's real effect is still unconfirmed "
-                 "either way (not tested as carefully).",
+                 "expect anything to happen.",
         ).pack(fill="x", padx=PAD, pady=(0, PAD_SM))
         cheat_frame = ui.frame(self)
         cheat_frame.pack(fill="x", padx=PAD, pady=(0, PAD_SM))
@@ -91,7 +90,6 @@ class SpeedTab(ttk.Frame):
             side="left", padx=(0, PAD_SM))
         ui.button(cheat_frame, "Infinite Ammo", command=self._set_infinite_ammo).pack(
             side="left", padx=(0, PAD_SM))
-        ui.button(cheat_frame, "Teleport Above", command=self._teleport_above).pack(side="left")
 
         ttk.Separator(self, orient="horizontal").pack(fill="x", padx=PAD, pady=(PAD_LG, PAD_SM))
 
@@ -194,17 +192,6 @@ class SpeedTab(ttk.Frame):
 
         def done(_result):
             self.app.status("Infinite ammo toggled (not independently confirmed which state it's now in)")
-
-        self.app.runner.run(work, done, self.app.on_error("ERROR"))
-
-    def _teleport_above(self):
-        self.app.status("Teleporting above...")
-
-        def work():
-            return api.teleport_above()
-
-        def done(_result):
-            self.app.status("Teleported above")
 
         self.app.runner.run(work, done, self.app.on_error("ERROR"))
 

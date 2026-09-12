@@ -47,6 +47,7 @@ python -m PyInstaller --noconfirm --onefile --windowed --name BodycamOverlay ^
     --add-data "src/families.json;." ^
     --add-data "src/maps.json;." ^
     --add-data "src/gamemodes.json;." ^
+    --add-data "src/item_catalog.json;." ^
     --add-data "src/app_icon.ico;." ^
     --add-data "src/mod;mod" ^
     --add-data "src/ue4ss_bundle;ue4ss_bundle" ^
