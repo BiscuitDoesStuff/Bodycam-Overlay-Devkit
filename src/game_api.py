@@ -3,7 +3,7 @@ gvas2 (Loadout.sav file editing) behind clean functions.
 
 Design rule: individual items (skins, operators, maps found on disk) are always
 pulled live/fresh; only the family->category mapping in families.json is
-hand-maintained (see docs/DOCUMENTATION.md section 5.3 for why). Rationale for
+hand-maintained (see docs/INTERNALS.md section 5.3 for why). Rationale for
 the trickier live-game hacks below (bot fill, cap/travel ordering,
 cycle_match's map-name matching) is centralized in that same file,
 section 5.5, rather than repeated per function.
@@ -275,7 +275,7 @@ def list_plugins():
 def preview_plugin(source_path):
     """Reads and validates a plugin file WITHOUT installing it (no copy into
     _PLUGINS_DIR) -- lets the UI show what a plugin's buttons will actually
-    run before the user commits to adding it (docs/DOCUMENTATION.md §3.7).
+    run before the user commits to adding it (docs/DOCUMENTATION.md §4.7).
     Returns (plugin_name, raw_data)."""
     with open(source_path, encoding="utf-8") as f:
         data = json.load(f)
@@ -913,7 +913,7 @@ def discover_extra_gamemodes(timeout=25):
     blind even against a wrong guess) then confirms with StaticFindObject.
     Returns {mode_name: class_path_or_None}. A hit still needs manually
     sanity-checking (team_based / default cap / team size) before trusting it
-    in a real match -- see docs/DOCUMENTATION.md §5.3 for the gamemodes.json
+    in a real match -- see docs/INTERNALS.md §5.3 for the gamemodes.json
     format add_gamemode() below writes into."""
     found = {}
     for mode_name, paths in _GAMEMODE_CANDIDATES.items():
@@ -940,7 +940,7 @@ def add_gamemode(name, class_path, team_based=False, default_cap=8, default_team
                   status="untested", note=""):
     """Appends a new entry to the persisted gamemodes.json (the copy in
     _CONFIG_DIR seeded on first run, not the bundled default -- see
-    reload_configs()/docs/DOCUMENTATION.md §5.3) and reloads GAMEMODES in
+    reload_configs()/docs/INTERNALS.md §5.3) and reloads GAMEMODES in
     place. Used by the Host tab's 'Discover More Gamemodes...' so a confirmed
     class path can be added without hand-editing the file first.
 
@@ -967,7 +967,7 @@ def add_gamemode(name, class_path, team_based=False, default_cap=8, default_team
 
 def write_cap(cap, team_size=None, bots=None, timeout=15):
     """Writes MaxPlayers (and optionally TeamMaxSize, HMS_bBotsMethod) only if
-    not in StartRound (see docs/DOCUMENTATION.md §5.5). Returns a status string;
+    not in StartRound (see docs/INTERNALS.md §5.5). Returns a status string;
     caller should check for 'ABORT' and retry."""
     ts_line = f"pcall(function() gm.ConfigDataAsset.TeamConfig.TeamMaxSize={team_size} end)" if team_size is not None else ""
     bots_line = f"pcall(function() gm.HMS_bBotsMethod={str(bool(bots)).lower()} end)" if bots is not None else ""
@@ -1002,7 +1002,7 @@ def write_cap_retrying(cap, team_size=None, bots=None, attempts=8, delay=2.0, ti
 def spawn_bots_to_target(target_count, timeout=15):
     """Manually fills to target_count via GameMode:SpawnBot(), one per 4s,
     bypassing ShouldSpawnBots()/HMS_bBotsMethod entirely -- see
-    docs/DOCUMENTATION.md §5.5 for why. Generation-guarded: calling this again
+    docs/INTERNALS.md §5.5 for why. Generation-guarded: calling this again
     supersedes any fill already in progress rather than stacking a second
     timer."""
     lua = f"""
@@ -1052,7 +1052,7 @@ def host_and_travel(map_path, gamemode_class, cap, team_size, private, bots, ses
     """Full flow: end current round if in one (wait for it to settle), travel to
     map+mode, then write cap/team AFTER the new mode has loaded -- each gamemode
     has its own persistent cap asset, so writing it only makes sense once the
-    target mode's GameMode instance actually exists (see docs/DOCUMENTATION.md
+    target mode's GameMode instance actually exists (see docs/INTERNALS.md
     §5.5). private=True sets both UpdateLobbyAccessMethod(true) and a session
     password as a second layer; bots=True bypasses HMS_bBotsMethod entirely and
     spawns manually via spawn_bots_to_target() (same section explains why).
@@ -1128,7 +1128,7 @@ def cycle_match(fallback_map_path=None, private=False, bots=True, timeout=20):
     map_path = None
     if level_name:
         # Mode rotation uses per-mode-prefixed level names, not maps.json's bare
-        # package name -- strip a known prefix before comparing (docs/DOCUMENTATION.md §5.5).
+        # package name -- strip a known prefix before comparing (docs/INTERNALS.md §5.5).
         bare = level_name
         for prefix in ("DM_", "TDM_", "GG_", "HP_", "BB_", "VS_", "WM_"):
             if bare.startswith(prefix):
@@ -1192,7 +1192,7 @@ def _list_backup_filenames():
 def backup_save(keep=20):
     """Copies Loadout.sav to a timestamped .backup-<ts> file alongside it, then
     prunes down to the `keep` most recent backups so these don't accumulate
-    forever (see docs/DOCUMENTATION.md §5.2). The timestamp is second-
+    forever (see docs/INTERNALS.md §5.2). The timestamp is second-
     resolution, so a `-2`/`-3`/... suffix is appended whenever that exact
     filename is already taken (confirmed to happen in practice -- three
     _apply_verified() calls in a fast test run all landed in the same

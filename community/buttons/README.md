@@ -2,8 +2,10 @@
 
 This folder holds Saved Command Buttons exports — JSON files in the same
 format the Console tab's "Save as Button..." and the Saved Command Buttons
-tab's "Export All..." / "Export Selected..." produce. Buttons get added here
-over time as they're built and tested.
+tab's "Export All..." / "Export Selected..." produce.
+
+Nothing's here yet — this repo doesn't ship a vetted example. Have a button
+pack you'd like to share? Submit it via a pull request.
 
 ## How to use one
 
@@ -14,5 +16,5 @@ over time as they're built and tested.
    before anything gets overwritten if a name already exists).
 
 See [docs/DOCUMENTATION.md](../../docs/DOCUMENTATION.md) for how the Console
-tab and its buttons actually work (§1) and the underlying file format (§3)
+tab and its buttons actually work (§2) and the underlying file format (§4)
 — Saved Command Buttons and Plugins share the same widget shape.

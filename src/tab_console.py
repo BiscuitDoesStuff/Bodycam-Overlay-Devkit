@@ -23,7 +23,7 @@ class ConsoleTab(ConsoleShellMixin, ttk.Frame):
                  "crash the game. Globals: pawn(), pc(), gm(), gs(), props(obj), funcs(obj), "
                  "count(className), render(v), valid(o), has(obj, fnName), UEHelpers. "
                  "Alt+Up/Down replays this session's history; 'Save as Button' turns a working "
-                 "snippet into a reusable button. Full reference: docs/DOCUMENTATION.md §1.",
+                 "snippet into a reusable button. Full reference: docs/DOCUMENTATION.md §2.5.",
         ).pack(fill="x", padx=PAD, pady=(PAD, 0))
 
         def extra_buttons(btn_row):

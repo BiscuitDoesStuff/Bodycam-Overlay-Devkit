@@ -3,7 +3,7 @@
 Deploys the bundled ue4ss_bundle/ (if UE4SS isn't already installed) and
 mod/ClaudeBridge/ into the game's Binaries/Win64, registering the mod in
 mods.txt. Design rationale for what gets bundled/deployed and why: see
-docs/DOCUMENTATION.md section 5.4.
+docs/INTERNALS.md section 5.4.
 
 Callable standalone (`python src/install_bridge.py`) or imported by overlay_app.py
 to run automatically on startup.
@@ -98,7 +98,7 @@ def find_game_root():
 def has_ue4ss(win64):
     """True only for a UE4SS install that will actually work -- also checks
     for the shared UEHelpers Lua library mods require(), not just the ue4ss/
-    folder's existence. See docs/DOCUMENTATION.md section 5.4 for why that
+    folder's existence. See docs/INTERNALS.md section 5.4 for why that
     distinction matters."""
     ue4ss_dir = os.path.join(win64, "ue4ss")
     if not os.path.isdir(ue4ss_dir):

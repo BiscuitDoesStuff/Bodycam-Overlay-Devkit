@@ -2,8 +2,11 @@
 
 This folder holds Plugin files — JSON files in the format the **Plugins**
 tab loads (a named, shareable bundle of buttons, with optional section
-labels/dividers). Plugins get added here over time as the community makes
-them.
+labels/dividers).
+
+Nothing's here yet — this repo doesn't ship a vetted example. Have a plugin
+you'd like to share? Submit it via a pull request (see **Contributing a
+plugin** below first).
 
 ## How to use one
 
@@ -14,7 +17,7 @@ them.
 4. It shows up as its own sub-tab immediately, and every time the app starts
    from then on.
 
-See [docs/DOCUMENTATION.md](../../docs/DOCUMENTATION.md) §3 for the exact
+See [docs/DOCUMENTATION.md](../../docs/DOCUMENTATION.md) §4 for the exact
 file format, how Run Once vs Toggle buttons work, and how to write your own
 plugin from scratch or by exporting from the Console tab.
 

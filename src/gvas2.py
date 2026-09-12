@@ -7,7 +7,7 @@ Layout discovered from the file itself:
 Knowing where each Size field lives lets us change a string's length and fix up
 every enclosing property's Size by the same delta. Format background and why
 this is a raw binary patch rather than a re-serialization: see
-docs/DOCUMENTATION.md section 5.2.
+docs/INTERNALS.md section 5.2.
 """
 import struct
 

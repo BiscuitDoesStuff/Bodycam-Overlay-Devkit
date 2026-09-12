@@ -130,7 +130,7 @@ class App:
 
     def _start_tray_icon(self):
         """A real taskbar/system-tray presence with a proper Exit option --
-        see docs/DOCUMENTATION.md §5.6 for why the window itself only hides."""
+        see docs/INTERNALS.md §5.6 for why the window itself only hides."""
         try:
             image = Image.open(os.path.join(api._HERE, "app_icon.ico")).convert("RGBA")
         except Exception:
@@ -150,7 +150,7 @@ class App:
 
     def quit_app(self):
         """Actually terminates the app (the tray's Exit item). Uses os._exit
-        rather than a normal mainloop return -- see docs/DOCUMENTATION.md §5.6."""
+        rather than a normal mainloop return -- see docs/INTERNALS.md §5.6."""
         try:
             self.tray_icon.stop()
         except Exception:
@@ -164,7 +164,7 @@ class App:
     def _run_setup_check(self):
         """Runs once at startup: makes sure ClaudeBridge (and, if it's already
         on this machine, the bundled UE4SS copy) is in place before the first
-        connection poll. See install_bridge.py / docs/DOCUMENTATION.md §5.4."""
+        connection poll. See install_bridge.py / docs/INTERNALS.md §5.4."""
         def prompt_for_path():
             # Called by install_bridge.ensure_setup() from this AsyncRunner worker
             # thread, but messagebox/filedialog must run on the Tk main thread --
@@ -286,7 +286,7 @@ class App:
 
 
 # Arbitrary fixed local port used purely as a single-instance lock -- binding
-# it is the mutex. See docs/DOCUMENTATION.md §5.6 for what breaks without it.
+# it is the mutex. See docs/INTERNALS.md §5.6 for what breaks without it.
 _SINGLE_INSTANCE_PORT = 47821
 
 

@@ -9,7 +9,7 @@ _FORK_URL = "https://github.com/BiscuitDoesStuff/BDT-Overlay-Fork"
 
 
 class AboutTab(ttk.Frame):
-    """Credits/license info -- see docs/DOCUMENTATION.md §5.6 for why this tab
+    """Credits/license info -- see docs/INTERNALS.md §5.6 for why this tab
     can't be made "tamper-proof" and what actually enforces attribution."""
 
     def __init__(self, parent, app):
