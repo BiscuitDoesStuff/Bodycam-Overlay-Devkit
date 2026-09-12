@@ -50,6 +50,7 @@ python -m PyInstaller --noconfirm --onefile --windowed --name BodycamOverlay ^
     --add-data "src/item_catalog.json;." ^
     --add-data "src/app_icon.ico;." ^
     --add-data "src/mod;mod" ^
+    --add-data "src/mod_tablet;mod_tablet" ^
     --add-data "src/ue4ss_bundle;ue4ss_bundle" ^
     --hidden-import pystray._win32 ^
     --icon "src/app_icon.ico" ^

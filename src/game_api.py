@@ -12,10 +12,12 @@ import json
 import os
 import re
 import shutil
+import struct
 import sys
 
 import bridge_client as bc
 import gvas2
+import install_bridge
 
 # PyInstaller onefile builds extract bundled data (see build.bat's --add-data)
 # to a temp dir exposed as sys._MEIPASS -- recreated fresh (and wiped) on every
@@ -1485,3 +1487,249 @@ def unlock_weapons_and_attachments(timeout=60):
     (a plain TSet spray via unlock_items(), ids that don't correspond to
     anything real are harmless)."""
     unlock_items(ITEM_CATEGORIES.get("DT_WeaponSkins", []), timeout=timeout)
+
+
+# --------------------------------------------------------------------------- Tablet Mod integration
+#
+# The Tablet Mod's Lua payload (bundled at src/mod_tablet/, deployed by
+# install_bridge.deploy_tablet_mods() to %LOCALAPPDATA%\BodycamOverlay\mods\)
+# is a fork that was originally built against this exact project's own
+# ClaudeBridge -- see dev/TABLET_MOD_INTEGRATION.md for the full story and
+# every design decision below.
+def _run_tablet_lua_file(relpath, timeout=15):
+    """Runs one bundled Tablet Mod .lua file through the bridge, with
+    _G.__BodycamModsRoot set first -- several of these files assert it's set
+    (to resolve their own sibling data files via dofile), so this replaces
+    what Reapply.ps1 + probe.py used to do across two separate processes
+    with one existing-pattern bc.run_lua() call."""
+    root = install_bridge.TABLET_MODS_DIR.replace("\\", "/") + "/"
+    src = f"_G.__BodycamModsRoot = '{root}'\nreturn dofile(_G.__BodycamModsRoot..'{relpath}')"
+    return bc.run_lua(src, timeout=timeout)
+
+
+def reapply_tablet_mods(timeout=15):
+    """Loads/reloads the Tablet Mod's in-game "Mods" menu (F12). Safe to call
+    repeatedly (e.g. after install_bridge.deploy_tablet_mods() redeploys a
+    newer version) -- reapply.lua re-registers its keybinds idempotently."""
+    return _run_tablet_lua_file("reapply.lua", timeout=timeout)
+
+
+def _tablet_catalog():
+    path = os.path.join(install_bridge.TABLET_MODS_DIR, "bdt", "catalog.json")
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _attachment_payload(row_names):
+    """Builds the raw GVAS ArrayProperty payload for a slot's Attachments
+    list -- one {DataTable, RowName} struct per name, matching the format
+    gvas2.replace_payload() writes over the existing region. Ported from the
+    Tablet Mod's own bdt/loadout_worker.py (fs()/prop()/payload()), which
+    needed this because gvas2.set_row_in_region()/set_rowname() can only
+    overwrite an EXISTING row's value, not change how many rows there are --
+    exactly the case here, since attachment count varies per weapon family."""
+    def fstr(s):
+        b = s.encode("ascii") + b"\x00"
+        return struct.pack("<i", len(b)) + b
+
+    def prop(name, typename, value_bytes):
+        return fstr(name) + fstr(typename) + struct.pack("<i", 0) + struct.pack("<i", len(value_bytes)) + b"\x00" + value_bytes
+
+    parts = b"".join(
+        prop("DataTable", "ObjectProperty",
+             fstr("/Game/BodycamCore/ItemsDefinition/DT_NewShopItem.DT_NewShopItem"))
+        + prop("RowName", "NameProperty", fstr(name)) + fstr("None")
+        for name in row_names
+    )
+    return struct.pack("<i", len(row_names)) + parts
+
+
+def apply_tablet_loadout_request(kind, loadout_idx, slot_idx, family_idx, variant_idx):
+    """Applies one loadout-save request from the in-game Tablet Mod menu
+    (bdt/config-menu.lua's 'Save weapon'/'Save operator' actions), using
+    THIS app's own gvas2.py + _apply_verified()/backup_save() instead of
+    the retired bdt/loadout_worker.py's separate, hand-rolled backup+atomic
+    -replace (functionally the same discipline, just not duplicated).
+    Indices are already 0-based here -- see start_tablet_loadout_watcher()
+    for the 1-based wire format this is called from."""
+    cat = _tablet_catalog()
+    if kind == "operator":
+        operator = cat["operators"][family_idx]
+        set_operator(loadout_idx, operator)
+        return f"Saved operator for loadout {loadout_idx + 1}."
+
+    fam = cat["families"][family_idx]
+    if not fam.get("valid"):
+        raise ValueError("Family has unresolved game rows")
+    weapon = fam["variants"][variant_idx]
+    if weapon not in cat["shop_rows"]:
+        raise ValueError(f"'{weapon}' is not a real shop row")
+
+    if fam.get("loose"):
+        # Loose catch-all rows: swap only the Wep row, preserve the slot's
+        # existing bundle and attachments untouched (mirrors loadout_worker.py's
+        # own prepare() for fam.get('loose')).
+        def edit(path):
+            gvas2.set_row_in_region(path, lambda L: L[loadout_idx]["slots"][slot_idx]["weapon"], weapon)
+
+        def expect(before):
+            expected = json.loads(json.dumps(before))
+            expected[loadout_idx]["slots"][slot_idx]["weapon"] = [weapon]
+            return expected
+
+        _apply_verified(edit, expect)
+        return f"Saved loadout {loadout_idx + 1}, slot {slot_idx + 1} (loose row)."
+
+    parts = [weapon if p in fam["variants"] else p for p in fam["parts"]]
+    if not all(p in cat["shop_rows"] for p in parts):
+        raise ValueError("one or more attachment parts are not real shop rows")
+
+    def edit(path):
+        gvas2.set_row_in_region(path, lambda L: L[loadout_idx]["slots"][slot_idx]["bundle"], fam["name"])
+        gvas2.set_row_in_region(path, lambda L: L[loadout_idx]["slots"][slot_idx]["weapon"], weapon)
+        gvas2.replace_payload(path, lambda L: L[loadout_idx]["slots"][slot_idx]["attachments"],
+                               _attachment_payload(parts))
+
+    def expect(before):
+        expected = json.loads(json.dumps(before))
+        expected[loadout_idx]["slots"][slot_idx] = {"bundle": [fam["name"]], "weapon": [weapon], "attachments": parts}
+        return expected
+
+    _apply_verified(edit, expect)
+    return f"Saved loadout {loadout_idx + 1}, slot {slot_idx + 1}."
+
+
+def start_tablet_loadout_watcher():
+    """Starts a daemon thread absorbing bdt/loadout_worker.py's job into this
+    already-running process, so loadout saves from the in-game Tablet Mod
+    menu stay instant without a second always-alive OS process. Polls the
+    same request.txt/response.txt drop the Lua menu already writes to/reads
+    from (bdt/config-menu.lua's own 1s tick already polls response.txt), so
+    no Lua-side protocol change was needed -- only the Python implementation
+    moved from a standalone script into this app's own process. No
+    heartbeat/pid file: this app IS the "worker" now, and if it's not
+    running, no other bridge feature works either (same existing limitation
+    as everything else here). Call once at startup (see overlay_app.py);
+    calling it again is harmless but starts a second redundant thread."""
+    import threading
+    import time
+
+    bdt_dir = os.path.join(install_bridge.TABLET_MODS_DIR, "bdt")
+    req_path = os.path.join(bdt_dir, "request.txt")
+    resp_path = os.path.join(bdt_dir, "response.txt")
+
+    def _write_response(rid, status, detail):
+        tmp = resp_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(f"{rid}\n{status}\n" + detail.replace("\n", " "))
+        os.replace(tmp, resp_path)
+
+    def loop():
+        while True:
+            try:
+                if os.path.exists(req_path):
+                    with open(req_path, encoding="utf-8") as f:
+                        lines = f.read().splitlines()
+                    os.remove(req_path)
+                    rid = lines[0] if lines else "?"
+                    try:
+                        if len(lines) != 6:
+                            raise ValueError("Malformed request")
+                        _, kind, li, si, fi, vi = lines
+                        if kind not in ("equip", "operator"):
+                            raise ValueError(f"unknown request kind '{kind}'")
+                        detail = apply_tablet_loadout_request(
+                            kind, int(li) - 1, int(si) - 1, int(fi) - 1, int(vi) - 1)
+                        _write_response(rid, "OK", detail)
+                    except Exception as e:
+                        _write_response(rid, "ERROR", str(e))
+            except Exception:
+                pass  # never let a transient file-access race kill this loop
+            time.sleep(0.5)
+
+    threading.Thread(target=loop, daemon=True).start()
+
+
+def reveal_catalog(apply=False, timeout=20):
+    """Reveals catalog rows hidden via bHiddenInGame in DT_NewShopItem/
+    DT_BasicBundles, porting the Tablet Mod's original reveal-catalog.py
+    onto mem_client.py -- see dev/TABLET_MOD_INTEGRATION.md for why this is
+    a materially different trust boundary (raw process-memory read/write)
+    than everything else this app does, which only ever runs Lua *inside*
+    the game via the sandboxed bridge.
+
+    Flow: (1) runs export-visibility-manifest.lua through the bridge to
+    write catalog-visibility-manifest.tsv with each row's live TMap address
+    + FName index (no row NAMES cross the bridge -- reading DataTable row
+    names through Lua's output array crashes this build, per that script's
+    own comment); (2) opens the live game process and proves the complete
+    live TMap contains exactly those identities before touching anything;
+    (3) with apply=True, clears only the verified bHiddenInGame byte for
+    each hidden row, journaling every change, then re-verifies each byte
+    actually changed; (4) with apply=True, runs verify-catalog-visible.lua
+    through the bridge to confirm zero hidden rows remain.
+
+    apply=False (default) only validates and reports what WOULD change --
+    nothing is written. Raises on any identity mismatch (row count,
+    duplicate index, invalid flag byte, an address that changed since
+    verification, etc.) -- this never writes on anything less than an
+    exact-match proof, mirroring the original script's own asserts."""
+    import time as _time
+    import mem_client
+
+    mods_dir = install_bridge.TABLET_MODS_DIR
+    _run_tablet_lua_file("export-visibility-manifest.lua", timeout=timeout)
+    manifest_path = os.path.join(mods_dir, "catalog-visibility-manifest.tsv")
+    with open(manifest_path, encoding="utf-8") as f:
+        lines = f.read().splitlines()
+
+    tables = {}
+    for line in lines:
+        if line.startswith("TABLE\t"):
+            _, name, addr, count = line.split("\t")
+            tables[name] = {"address": int(addr), "count": int(count), "rows": {}}
+        elif line.startswith("ROW\t"):
+            _, table, index, row_name = line.split("\t")
+            tables[table]["rows"][int(index)] = row_name
+    assert len(tables) == 2, f"expected 2 tables in the manifest, found {len(tables)}"
+
+    pid = mem_client.find_pid_by_name("Bodycam-Win64-Shipping")
+    if pid is None:
+        raise RuntimeError("Bodycam-Win64-Shipping is not running")
+
+    changes = []
+    with mem_client.ProcessHandle(pid, write=apply) as h:
+        for name, t in tables.items():
+            head = h.read_bytes(t["address"] + 0x30, 80)
+            ptr, num, cap = struct.unpack_from("<Qii", head)
+            assert num == t["count"] == len(t["rows"]) and 0 < num <= 3000 and cap >= num, \
+                f"{name}: TMap header mismatch (num={num}, expected={t['count']}, cap={cap})"
+            assert struct.unpack_from("<i", head, 0x34)[0] == 0, f"{name}: sparse map has freed slots"
+            data = h.read_bytes(ptr, num * 24)
+            seen = set()
+            for i in range(num):
+                index, number, rp, _hn, _hi = struct.unpack_from("<IIQii", data, i * 24)
+                assert number == 0 and index in t["rows"] and index not in seen, \
+                    f"{name}: entry {i} identity mismatch"
+                seen.add(index)
+                row_name = t["rows"][index]
+                row = h.read_bytes(rp, 48)
+                assert row[15] in (0, 1), f"{name}/{row_name}: invalid visibility flag"
+                if row[15] == 1:
+                    changes.append({"table": name, "row": row_name, "address": rp + 15,
+                                     "identity": data[i * 24:i * 24 + 16].hex(), "entry_address": ptr + i * 24})
+        if apply:
+            journal_path = os.path.join(mods_dir, f"catalog-visibility-{pid}-{_time.time_ns()}.json")
+            for c in changes:
+                assert h.read_bytes(c["entry_address"], 16).hex() == c["identity"], \
+                    f"{c['table']}/{c['row']}: identity changed since verification"
+                assert h.read_bytes(c["address"], 1) == b"\x01", f"{c['table']}/{c['row']}: flag changed since verification"
+                h.write_bytes(c["address"], b"\x00")
+                assert h.read_bytes(c["address"], 1) == b"\x00", f"{c['table']}/{c['row']}: write did not take"
+            with open(journal_path, "w", encoding="utf-8") as jf:
+                json.dump({"pid": pid, "changes": changes}, jf, indent=2)
+
+    if apply:
+        _run_tablet_lua_file("verify-catalog-visible.lua", timeout=timeout)
+
+    return {"hidden_found": len(changes), "applied": bool(apply), "rows": [c["row"] for c in changes]}
