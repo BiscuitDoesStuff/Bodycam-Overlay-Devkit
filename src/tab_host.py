@@ -5,7 +5,7 @@ from tkinter import ttk, messagebox
 import game_api as api
 import ui_theme as ui
 from ui_theme import PANEL, FG, MUTED, BAD, PAD, PAD_SM
-from ui_common import _load_ui_state, _save_ui_state, _make_scrollable, _FILTER_DEBOUNCE_MS
+from ui_common import load_ui_state, save_ui_state, make_scrollable, FILTER_DEBOUNCE_MS, set_text
 
 
 class HostTab(ttk.Frame):
@@ -34,7 +34,7 @@ class HostTab(ttk.Frame):
         right_outer = ui.frame(self, panel=True, width=270)
         right_outer.pack(side="right", fill="y", padx=(0, PAD), pady=PAD)
         right_outer.pack_propagate(False)
-        right = _make_scrollable(right_outer, panel=True)
+        right = make_scrollable(right_outer, panel=True)
 
         ui.label(left, text="Map", bold=True).pack(anchor="w")
 
@@ -109,6 +109,11 @@ class HostTab(ttk.Frame):
 
         ui.button(left, "Load Custom Match", kind="accent", command=self._load_match).pack(
             fill="x", pady=(PAD + 2, 0))
+        # Persistent, not just a status-bar mention -- the status bar gets
+        # overwritten by the very next thing that happens (a poll tick, any
+        # other button), which would make the password unrecoverable.
+        self.session_password_lbl = ui.label(left, text="", muted=True)
+        self.session_password_lbl.pack(anchor="w", pady=(PAD_SM, 0))
 
         # right column: cycle + live state
         ui.label(right, text="Live State", bg=PANEL, bold=True).pack(anchor="w", padx=PAD, pady=(PAD, 0))
@@ -243,15 +248,16 @@ class HostTab(ttk.Frame):
         for n in dev:
             self.map_tree.insert(self.CAT_DEV, "end", iid=n, text=n, tags=("map",))
 
-        self.map_tree.insert("", "end", iid=self.CAT_UNCONFIRMED_MAP, open=True, tags=("category",),
-                              text=f"UNCONFIRMED MAPS (guessed paths)  ({len(unconfirmed)})")
-        for n in unconfirmed:
-            self.map_tree.insert(self.CAT_UNCONFIRMED_MAP, "end", iid=n, text=n, tags=("map_unconfirmed",))
+        if unconfirmed:
+            self.map_tree.insert("", "end", iid=self.CAT_UNCONFIRMED_MAP, open=True, tags=("category",),
+                                  text=f"UNCONFIRMED MAPS (guessed paths)  ({len(unconfirmed)})")
+            for n in unconfirmed:
+                self.map_tree.insert(self.CAT_UNCONFIRMED_MAP, "end", iid=n, text=n, tags=("map_unconfirmed",))
 
     def _on_map_filter_keyrelease(self, _evt=None):
         if self._map_filter_after_id is not None:
             self.after_cancel(self._map_filter_after_id)
-        self._map_filter_after_id = self.after(_FILTER_DEBOUNCE_MS, self._apply_map_filter)
+        self._map_filter_after_id = self.after(FILTER_DEBOUNCE_MS, self._apply_map_filter)
 
     def _apply_map_filter(self):
         self._map_filter_after_id = None
@@ -364,8 +370,8 @@ class HostTab(ttk.Frame):
         """Restores the last map/gamemode/cap/team/private/bots this tab was
         used with, so relaunching the overlay doesn't reset every field back
         to defaults. Written by _load_match() on every successful load; see
-        _load_ui_state()/_save_ui_state() near the top of this file."""
-        state = _load_ui_state()
+        load_ui_state()/save_ui_state() near the top of this file."""
+        state = load_ui_state()
         mode = state.get("gamemode")
         if not (mode and self._select_gamemode(mode)):
             # nothing saved (or it's gone from gamemodes.json) -- fall back to
@@ -502,8 +508,10 @@ class HostTab(ttk.Frame):
 
         def done(result):
             self.last_hosted = dict(map_path=map_path, private=private, bots=bots)
-            _save_ui_state({"map": name, "gamemode": mode_name, "cap": cap,
+            save_ui_state({"map": name, "gamemode": mode_name, "cap": cap,
                              "team": team or 1, "private": private, "bots": bots})
+            self.session_password_lbl.configure(
+                text=f"Session password: {api.SESSION_PASSWORD}" if private else "")
             self.app.status(f"Loaded {name}: {result}")
 
         self._guard_then_run(
@@ -516,14 +524,12 @@ class HostTab(ttk.Frame):
             return api.get_live_state()
 
         def done(state):
-            self.state_box.configure(state="normal")
-            self.state_box.delete("1.0", tk.END)
             if not state.get("in_match"):
-                self.state_box.insert(tk.END, "Not in a match\n(in Lobby / menu)")
+                body = "Not in a match\n(in Lobby / menu)"
             else:
-                for k in ("mode_name", "phase", "count", "max", "team_size"):
-                    self.state_box.insert(tk.END, f"{k}: {state.get(k)}\n")
-            self.state_box.configure(state="disabled")
+                body = "".join(f"{k}: {state.get(k)}\n" for k in
+                                ("mode_name", "phase", "count", "max", "team_size"))
+            set_text(self.state_box, body)
 
         self.app.runner.run(work, done, self.app.on_error("state check failed"))
 
@@ -550,14 +556,11 @@ class HostTab(ttk.Frame):
             return api.get_match_info()
 
         def done(info):
-            self.match_info_box.configure(state="normal")
-            self.match_info_box.delete("1.0", tk.END)
             if info is None:
-                self.match_info_box.insert(tk.END, "Not in a match\n(in Lobby / menu)")
+                body = "Not in a match\n(in Lobby / menu)"
             else:
-                for k, v in info.items():
-                    self.match_info_box.insert(tk.END, f"{k}: {v}\n")
-            self.match_info_box.configure(state="disabled")
+                body = "".join(f"{k}: {v}\n" for k, v in info.items())
+            set_text(self.match_info_box, body)
 
         self.app.runner.run(work, done, self.app.on_error("match info check failed"))
 

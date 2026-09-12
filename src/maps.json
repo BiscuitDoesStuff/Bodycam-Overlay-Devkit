@@ -23,14 +23,5 @@
   "Lobby B":              {"path": "/Game/Map/Lobby/LobbyB",                             "playlist": false, "status": "confirmed"},
   "Lobby Host":           {"path": "/Game/Map/LobbyHost/LobbyHost",                      "playlist": false, "status": "confirmed"},
   "Drone Racetrack":      {"path": "/Game/Doors/Lobby_Drone_Racetrack",                  "playlist": false, "status": "confirmed"},
-  "Drone Racetrack 2":    {"path": "/Game/Doors/Lobby_Drone_Racetrack2",                 "playlist": false, "status": "confirmed"},
-
-  "Assylum":              {"path": "/Game/Map/Assylum/Assylum",                          "playlist": false, "status": "unconfirmed",
-                            "note": "Zombie-mode map (DT_UI_ZombieMaps row 'Assylum', spelling as in the game's own data). Path guessed from the common /Game/Map/<Name>/<Name> convention -- servertravel to it did not change the level (2026-09-07), but that test happened during a run where even a known-good map/mode combo also failed, so this doesn't prove the path is wrong, only that it's unconfirmed."},
-  "Village":              {"path": "/Game/Map/Village/Village",                          "playlist": false, "status": "unconfirmed",
-                            "note": "Zombie-mode map (DT_UI_ZombieMaps row 'Village'). Same guessed-path caveat as Assylum above."},
-  "Pit":                  {"path": "/Game/Map/Pit/Pit",                                  "playlist": false, "status": "unconfirmed",
-                            "note": "Pit-mode map (DT_UI_PitMaps row 'Pit'). Guessed path, never travel-tested."},
-  "Logistics":            {"path": "/Game/Map/Logistics/Logistics",                      "playlist": false, "status": "unconfirmed",
-                            "note": "Pit-mode map (DT_UI_PitMaps row 'Logistics'). Guessed path, never travel-tested."}
+  "Drone Racetrack 2":    {"path": "/Game/Doors/Lobby_Drone_Racetrack2",                 "playlist": false, "status": "confirmed"}
 }

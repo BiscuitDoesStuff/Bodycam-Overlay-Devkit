@@ -4,8 +4,8 @@ from tkinter import ttk, messagebox, filedialog
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import BG, PAD, PAD_SM, PAD_LG
-from ui_common import _make_scrollable, render_command_widgets
+from ui_theme import PAD, PAD_SM, PAD_LG
+from ui_common import make_scrollable, render_command_widgets, save_cancel_row
 
 
 class SavedButtonsTab(ttk.Frame):
@@ -37,7 +37,7 @@ class SavedButtonsTab(ttk.Frame):
         ui.label(toolbar, text="Save commands as buttons from the Console tab.", muted=True).pack(
             side="left", padx=PAD)
 
-        self.inner = _make_scrollable(self)
+        self.inner = make_scrollable(self)
         self.refresh()
 
     def refresh(self):
@@ -52,16 +52,13 @@ class SavedButtonsTab(ttk.Frame):
             return
 
         groups = {}
-        order = []
         for w in widgets:
             cat = w.get("category") or ""
-            if cat not in groups:
-                groups[cat] = []
-                order.append(cat)
-            groups[cat].append(w)
+            groups.setdefault(cat, []).append(w)
         # "General" (uncategorized) first if present, then named categories
-        # in the order they were first seen in the saved list.
-        ordered_cats = ([""] if "" in groups else []) + [c for c in order if c]
+        # in the order they were first seen in the saved list -- plain dict
+        # insertion order (3.7+), no separate order-tracking list needed.
+        ordered_cats = ([""] if "" in groups else []) + [c for c in groups if c]
 
         for cat in ordered_cats:
             specs = groups[cat]
@@ -109,11 +106,7 @@ class SavedButtonsTab(ttk.Frame):
 
     def _recategorize(self, spec):
         label = spec.get("label", "?")
-        win = tk.Toplevel(self.app.root)
-        win.title(f"Category for '{label}'")
-        win.configure(bg=BG)
-        win.attributes("-topmost", True)
-        win.bind("<Escape>", lambda e: win.destroy())
+        win = ui.toplevel(self.app.root, f"Category for '{label}'")
         ui.label(win, text=f"Category for '{label}' -- pick an existing one or type a new one. "
                             "Leave blank for General.").pack(anchor="w", padx=PAD, pady=(PAD, PAD_SM))
         cat_var = tk.StringVar(value=spec.get("category", ""))
@@ -126,10 +119,7 @@ class SavedButtonsTab(ttk.Frame):
             api.save_snippet(label, spec.get("code", ""), spec.get("mode", "run_once"), cat_var.get().strip())
             self.refresh()
 
-        btn_row = ui.frame(win)
-        btn_row.pack(pady=PAD)
-        ui.button(btn_row, "Save", kind="accent", command=save).pack(side="left", padx=6)
-        ui.button(btn_row, "Cancel", command=win.destroy).pack(side="left")
+        save_cancel_row(win, save, win.destroy, pady=PAD)
         combo.bind("<Return>", lambda e: save())
 
     def _export_selected(self):

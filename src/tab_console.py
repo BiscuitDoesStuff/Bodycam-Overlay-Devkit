@@ -20,25 +20,17 @@ class ConsoleTab(ConsoleShellMixin, ttk.Frame):
         ui.info_banner(
             self, title="Console — Lua inside the game",
             text="Runs directly on Bodycam's own Lua VM -- no sandbox, so a bad call can "
-                 "crash the game. Globals: pawn(), props(obj), funcs(obj), count(className), "
-                 "render(v), valid(o), UEHelpers, plus 'pc' (current PlayerController). "
+                 "crash the game. Globals: pawn(), pc(), gm(), gs(), props(obj), funcs(obj), "
+                 "count(className), render(v), valid(o), has(obj, fnName), UEHelpers. "
                  "Alt+Up/Down replays this session's history; 'Save as Button' turns a working "
                  "snippet into a reusable button. Full reference: docs/DOCUMENTATION.md §1.",
         ).pack(fill="x", padx=PAD, pady=(PAD, 0))
 
-        self.input_box = ui.text(self, height=6)
-        self.input_box.pack(fill="x", padx=PAD, pady=(PAD_SM - 2, PAD_SM))
-        self.input_box.insert("1.0", "return 1+1")
-        self._bind_history_keys()
+        def extra_buttons(btn_row):
+            ui.button(btn_row, "Save as Button...", kind="accent", command=self._save_as_button).pack(
+                side="left", padx=PAD_SM + 2)
 
-        btn_row = ui.frame(self)
-        btn_row.pack(fill="x", padx=PAD)
-        ui.button(btn_row, "Run  (Ctrl+Enter)", kind="accent", command=self._run_from_input).pack(side="left")
-        ui.button(btn_row, "Save as Button...", kind="accent", command=self._save_as_button).pack(
-            side="left", padx=PAD_SM + 2)
-        ui.button(btn_row, "Clear Output", command=self._clear_output).pack(side="left", padx=PAD_SM + 2)
-        ui.label(btn_row, text="Alt+Up/Down: history", muted=True).pack(side="right")
-
+        self._build_input_row(height=6, default_text="return 1+1", extra_buttons=extra_buttons)
         self._build_output_area()
 
     def _run_from_input(self, _evt=None):
@@ -48,9 +40,7 @@ class ConsoleTab(ConsoleShellMixin, ttk.Frame):
         self.history.append(code)
         self.hist_idx = len(self.history)
         self._log(f">>> {code}", "cmd")
-        # `pc` is just a local declaration -- safe to prepend to ANY payload,
-        # including one that ends with the user's own `return`.
-        self._execute("local pc = UEHelpers.GetPlayerController()\n" + code)
+        self._execute(code)
         return "break"  # swallow the Enter keypress in Ctrl+Enter binding
 
     def _save_as_button(self):

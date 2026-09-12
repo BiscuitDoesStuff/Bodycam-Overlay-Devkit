@@ -223,6 +223,26 @@ def treeview(parent, **kw):
     return tv
 
 
+def toplevel(parent, title, geometry=None):
+    """Dialog window factory -- every Toplevel in this app should be built
+    through this, not tk.Toplevel(parent) directly. Besides the shared dark
+    background/title/topmost setup, this makes the dialog actually modal
+    (transient + grab_set) and closable with Escape -- previously each
+    dialog reimplemented the bag of setup calls EXCEPT modality, so a click
+    on the main window behind any of them could still reach it."""
+    win = tk.Toplevel(parent)
+    win.title(title)
+    win.configure(bg=BG)
+    win.attributes("-topmost", True)
+    if geometry:
+        win.geometry(geometry)
+    win.transient(parent)
+    win.grab_set()
+    win.bind("<Escape>", lambda e: win.destroy())
+    win.focus_set()
+    return win
+
+
 def info_banner(parent, text, title=None):
     """A quiet callout box (panel background, thin red left edge) for a short
     bit of "here's what this tab does and what to watch out for" guidance --
