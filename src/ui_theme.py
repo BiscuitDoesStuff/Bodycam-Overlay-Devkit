@@ -33,7 +33,6 @@ MUTED = "#9c9ca1"       # secondary text -- neutral grey (no color tint)
 
 RED = "#c8102e"         # the one accent color: primary actions, selection, focus
 RED_HOVER = "#d81b3a"
-RED_PRESSED = "#a10d25"
 RED_MUTED = "#7a2530"   # for a quiet destructive outline, not a full-saturation fill
 
 # Back-compat names used around the app for the two semantic button tiers --
@@ -60,7 +59,6 @@ PAD_LG = 16
 _BUTTON_COLORS = {
     "default": (INPUT, BORDER, FG),
     "accent": (RED, RED_HOVER, FG),
-    "good": (RED, RED_HOVER, FG),
 }
 
 
@@ -88,10 +86,8 @@ def apply(root):
 
     style.configure(".", background=BG, foreground=FG, font=FONT_BASE)
     style.configure("TFrame", background=BG)
-    style.configure("Card.TFrame", background=PANEL)
     style.configure("TLabel", background=BG, foreground=FG)
     style.configure("TSeparator", background=BORDER)
-    style.configure("TPanedwindow", background=BG)
 
     style.configure("TNotebook", background=BG, borderwidth=0, tabmargins=(8, 8, 8, 0))
     style.configure("TNotebook.Tab", background=PANEL, foreground=MUTED,
@@ -130,14 +126,11 @@ def apply(root):
         background=[("selected", RED)],
         foreground=[("selected", FG)],
     )
-    # Category rows use this tag (bold, muted-until-selected) to read as
-    # section headers rather than pickable items -- see HostTab._populate_map_tree.
-    style.configure("Treeview.Heading", background=PANEL, foreground=FG, borderwidth=0)
 
 
 def button(parent, text, kind="default", command=None, fg=None, width=None, outline=False, **kw):
     """A flat tk.Button, no hover animation (see module docstring). `kind`
-    picks the fill: 'default' (neutral dark) or 'accent'/'good' (solid red,
+    picks the fill: 'default' (neutral dark) or 'accent' (solid red,
     for the primary action on a screen). Pass outline=True for a destructive
     action instead (e.g. Delete/Remove) -- a quiet red-bordered button rather
     than a second competing solid color. Pass fg= to override just the text

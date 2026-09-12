@@ -4,8 +4,8 @@ gvas2 (Loadout.sav file editing) behind clean functions.
 Design rule: individual items (skins, operators, maps found on disk) are always
 pulled live/fresh; only the family->category mapping in families.json is
 hand-maintained (see docs/DOCUMENTATION.md section 5.3 for why). Rationale for
-the trickier live-game hacks below (bot fill, explosive bullets, cap/travel
-ordering, cycle_match's map-name matching) is centralized in that same file,
+the trickier live-game hacks below (bot fill, cap/travel ordering,
+cycle_match's map-name matching) is centralized in that same file,
 section 5.5, rather than repeated per function.
 """
 import json
@@ -22,11 +22,6 @@ import gvas2
 # launch. Plain `python src/overlay_app.py` runs use this file's own directory.
 _HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 SAVE_PATH = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Bodycam", "Saved", "SaveGames", "Loadout.sav")
-
-_GAME_ROOT_CANDIDATES = [
-    r"C:\Program Files (x86)\Steam\steamapps\common\Bodycam",
-    r"C:\Program Files\Steam\steamapps\common\Bodycam",
-]
 
 # families.json / maps.json / gamemodes.json are meant to be hand-editable
 # (see README) -- that only works if edits survive a restart, which _HERE
@@ -761,17 +756,9 @@ def set_invincible(timeout=15):
     have NO actual effect -- taking damage afterward was not prevented.
     Kept here (not removed) since it's still a harmless, error-free call,
     but do not expect it to do anything. `UCheatManager:God()` (the plain
-    Unreal Engine base-class cheat, not Bodycam-specific) was also tried,
-    with continuous health polling through the fall triggered by the
-    now-removed `CheatTeleportAbove` cheat (confirmed live 2026-09-09,
-    see dev/RESEARCH_NOTES.md for the full investigation) -- health
-    dropped to -498 and the pawn's identity changed (a real
-    death+respawn) on the exact same timeline as with no God() call at
-    all. Confirmed NOT to prevent that death path. The fixed ~-500 value
-    (not a gradual/proportional drop) suggests a direct instant-kill/
-    out-of-bounds check rather than normal TakeDamage(), which would
-    explain why neither cheat's invincibility
-    has any effect on it."""
+    Unreal Engine base-class cheat, not Bodycam-specific) was also tried
+    and confirmed NOT to prevent death from the now-removed
+    `CheatTeleportAbove` cheat's fall (see docs/INTERNALS.md)."""
     _cheat("CheatSetInvincible", timeout)
 
 
@@ -1111,10 +1098,6 @@ def dump_loadout(idx):
     }
 
 
-def dump_all_loadouts():
-    return [dump_loadout(i) for i in range(loadout_count())]
-
-
 _BACKUP_PREFIX = os.path.basename(SAVE_PATH) + ".backup-"
 
 
@@ -1187,10 +1170,10 @@ def restore_backup(backup_path):
 def _snapshot_loadouts(path):
     """Full structural snapshot of every loadout in `path`, as plain
     lists/strings (no gvas2 region objects, so two snapshots can be compared
-    with plain ==). Same shape dump_loadout()/dump_all_loadouts() expose
-    publicly, just including attachments too (which those two intentionally
-    leave out) since a write-verification pass needs the complete picture,
-    not just the two fields the UI displays."""
+    with plain ==). Same shape dump_loadout() exposes publicly, just
+    including attachments too (which it intentionally leaves out) since a
+    write-verification pass needs the complete picture, not just the two
+    fields the UI displays."""
     d, regs, rows, L = gvas2.slots(path)
 
     def names(region):

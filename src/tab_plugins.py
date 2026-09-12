@@ -52,7 +52,7 @@ class PluginPreviewDialog(tk.Toplevel):
 
         btn_row = ui.frame(self)
         btn_row.pack(fill="x", padx=PAD, pady=PAD)
-        ui.button(btn_row, "Add Plugin", kind="good", command=self._confirm).pack(side="left")
+        ui.button(btn_row, "Add Plugin", kind="accent", command=self._confirm).pack(side="left")
         ui.button(btn_row, "Cancel", command=self.destroy).pack(side="left", padx=PAD_SM + 2)
 
     def _confirm(self):
@@ -84,7 +84,7 @@ class PluginsTab(ttk.Frame):
 
         toolbar = ui.frame(self)
         toolbar.pack(fill="x", padx=PAD, pady=PAD)
-        ui.button(toolbar, "Add Plugin...", kind="good", command=self._add_plugin).pack(side="left")
+        ui.button(toolbar, "Add Plugin...", kind="accent", command=self._add_plugin).pack(side="left")
         ui.button(toolbar, "Remove Selected Plugin", outline=True, command=self._remove_selected).pack(
             side="left", padx=PAD_SM + 2)
 

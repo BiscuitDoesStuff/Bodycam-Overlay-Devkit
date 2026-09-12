@@ -118,7 +118,7 @@ class HostTab(ttk.Frame):
         ui.button(right, "Refresh State", command=self._refresh_state).pack(fill="x", padx=PAD)
         ui.button(right, "Reload Maps/Modes (from disk)", command=self._reload_config).pack(
             fill="x", padx=PAD, pady=(PAD_SM, 0))
-        ui.button(right, "↻  Cycle Current Match", kind="good", command=self._cycle).pack(
+        ui.button(right, "↻  Cycle Current Match", kind="accent", command=self._cycle).pack(
             fill="x", padx=PAD, pady=(PAD, 0))
         ui.button(right, "Force Round End", command=self._force_end).pack(
             fill="x", padx=PAD, pady=(PAD, PAD))

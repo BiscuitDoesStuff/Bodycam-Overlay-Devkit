@@ -34,7 +34,7 @@ class ConsoleTab(ConsoleShellMixin, ttk.Frame):
         btn_row = ui.frame(self)
         btn_row.pack(fill="x", padx=PAD)
         ui.button(btn_row, "Run  (Ctrl+Enter)", kind="accent", command=self._run_from_input).pack(side="left")
-        ui.button(btn_row, "Save as Button...", kind="good", command=self._save_as_button).pack(
+        ui.button(btn_row, "Save as Button...", kind="accent", command=self._save_as_button).pack(
             side="left", padx=PAD_SM + 2)
         ui.button(btn_row, "Clear Output", command=self._clear_output).pack(side="left", padx=PAD_SM + 2)
         ui.label(btn_row, text="Alt+Up/Down: history", muted=True).pack(side="right")

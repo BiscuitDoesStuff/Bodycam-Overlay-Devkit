@@ -174,7 +174,7 @@ class SaveButtonDialog(tk.Toplevel):
 
         btn_row = ui.frame(self)
         btn_row.pack(pady=PAD_LG - 6)
-        ui.button(btn_row, "Save", kind="good", command=self._save).pack(side="left", padx=6)
+        ui.button(btn_row, "Save", kind="accent", command=self._save).pack(side="left", padx=6)
         ui.button(btn_row, "Cancel", command=self.destroy).pack(side="left")
         entry.bind("<Return>", lambda e: self._save())
         cat_combo.bind("<Return>", lambda e: self._save())
