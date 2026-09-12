@@ -159,23 +159,3 @@ def set_row_in_region(path, region_getter, new):
     assert len(ks) == 1, f"expected 1 RowName in region, found {len(ks)}"
     return set_rowname(path, ks[0]['str_off'], ks[0]['value'], new)
 
-def replace_payload(path, region_getter, payload):
-    """Replace a region's whole payload (e.g. an Attachments array) and fix sizes.
-    Unlike set_row_in_region, this can change the NUMBER of rows in the region
-    (set_rowname can only overwrite an existing row's value) -- needed for
-    attachment lists whose length varies per weapon family."""
-    d, regs, rows, L = slots(path)
-    tgt = region_getter(L)
-    start, end = tgt['start'], tgt['end']
-    delta = len(payload) - (end - start)
-    for r in regs:
-        if r is tgt:
-            struct.pack_into('<i', d, r['size_off'], len(payload))
-        elif r['start'] <= start and r['end'] >= end and r['size_off'] < start:
-            (sz,) = struct.unpack_from('<i', d, r['size_off'])
-            struct.pack_into('<i', d, r['size_off'], sz + delta)
-    d[start:end] = payload
-    with open(path, 'wb') as f:
-        f.write(d)
-    return delta
-
