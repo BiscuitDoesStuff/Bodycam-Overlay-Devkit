@@ -8,11 +8,11 @@ import os
 import queue
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import BG, PANEL, INPUT, FG, MUTED, ACCENT, GOOD, BAD, PAD, PAD_SM, PAD_LG
+from ui_theme import BG, PANEL, INPUT, ACCENT, GOOD, BAD, PAD, PAD_SM, PAD_LG
 
 # Small persisted "remember what I last picked" file -- Host tab restores its
 # map/gamemode/cap/team/private/bots selections from this on the next launch
