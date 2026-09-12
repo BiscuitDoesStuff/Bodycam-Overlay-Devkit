@@ -78,11 +78,23 @@ def scan_inner(d, start, end, out, depth):
         i += 1
 
 def regions(path):
-    d = bytearray(open(path,'rb').read())
+    with open(path, 'rb') as f:
+        d = bytearray(f.read())
     out = []
     # skip the GVAS header: find the SaveGame class name, then properties follow
     tag = b'/Game/GM/SaveGame/SG_Loadout.SG_Loadout_C'
     anchor = d.find(tag)
+    if anchor == -1:
+        # bytes.find() returns -1 when not found; anchor + len(tag) + 2 would
+        # silently compute a small positive offset near the START of the file
+        # instead of raising, so every property this misparses as (rather
+        # than a clear "this isn't a real Loadout.sav" error) would be
+        # confidently wrong -- everything downstream, including
+        # game_api.py's write-verification snapshots, trusts this offset.
+        raise ValueError(
+            f"{path}: SaveGame class tag not found -- this doesn't look like a real "
+            "Loadout.sav (wrong file, corrupted, or an unexpected game/save version)."
+        )
     start = anchor + len(tag) + 2   # NUL terminator + one padding byte
     walk(d, start, len(d), out)
     return d, out
@@ -109,7 +121,8 @@ def set_rowname(path, str_off, expected, new):
                 struct.pack_into('<i', d, r['size_off'], r['size'] + delta)
     payload = struct.pack('<i', len(new)+1) + new.encode('ascii') + b'\x00'
     d[str_off:after] = payload
-    open(path,'wb').write(d)
+    with open(path, 'wb') as f:
+        f.write(d)
     return delta
 
 # ---------------------------------------------------------------- slot helpers
@@ -159,7 +172,8 @@ def replace_payload(path, region_getter, payload):
             (sz,) = struct.unpack_from('<i', d, r['size_off'])
             struct.pack_into('<i', d, r['size_off'], sz + delta)
     d[start:end] = payload
-    open(path, 'wb').write(d)
+    with open(path, 'wb') as f:
+        f.write(d)
     return delta
 
 def payload_of(path, region_getter):
@@ -182,7 +196,8 @@ def set_index(path, n):
         prop = (fstr('SavedCurrentLoadoutIndex') + fstr('IntProperty') + struct.pack('<i', 0)
                 + struct.pack('<i', 4) + b'\x00' + struct.pack('<i', n))
         d[start:start] = prop
-    open(path, 'wb').write(d)
+    with open(path, 'wb') as f:
+        f.write(d)
     d2, regs2 = regions(path)
     r = [x for x in regs2 if x['name'] == 'SavedCurrentLoadoutIndex'][0]
     return struct.unpack_from('<i', d2, r['start'])[0]

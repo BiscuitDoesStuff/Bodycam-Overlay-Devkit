@@ -2,7 +2,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
-import game_api as api
 import ui_theme as ui
 from ui_theme import BG, PANEL, INPUT, FG, MUTED, ACCENT, GOOD, BAD, PAD, PAD_SM, PAD_LG
 import shell_client

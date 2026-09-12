@@ -21,6 +21,9 @@ LICENSE                 MIT license for this app's own code
 requirements.txt        Python dependencies
 build.bat               Packages src/ into dist/BodycamOverlay.exe
 BodycamOverlay.spec     PyInstaller spec for the same build, if you run it directly
+start.bat               Double-click shortcut for `python src/overlay_app.py`
+                        (path-independent -- works no matter where the repo
+                        is cloned to)
 
 docs/
   DOCUMENTATION.md      Console/Shell/Plugins reference, troubleshooting, internals
@@ -49,6 +52,10 @@ src/
   install_bridge.py      Finds the game, deploys UE4SS + ClaudeBridge
   app_icon.ico           App / exe icon
   families.json, maps.json, gamemodes.json    Hand-curated config (see below)
+  item_catalog.json      Real item-id -> category mapping extracted offline
+                        from the shop data table (see the Currency & Unlocks
+                        bullet below) -- same persisted-to-AppData pattern
+                        as the three files above, not meant for hand-editing
   mod/ClaudeBridge/       The UE4SS Lua mod this whole app talks to
   ue4ss_bundle/           A full copy of RE-UE4SS (MIT-licensed, see its own LICENSE)
 ```
@@ -81,7 +88,7 @@ startup, so most people never need to run this script by hand.
 python src/overlay_app.py
 ```
 
-Or run the packaged `dist/BodycamOverlay.exe` (see **Packaging as an .exe**
+Or just double-click `start.bat` in the repo root. Or run the packaged `dist/BodycamOverlay.exe` (see **Packaging as an .exe**
 below) — same behavior, no Python install required, and it repairs its own
 UE4SS/ClaudeBridge setup on first launch.
 
@@ -147,16 +154,12 @@ after installing the mod.
   confirmed to reset the same way currency does on a game restart, though
   both unlock buttons work fine for the rest of the session they're used in;
   re-run one after every restart if you want it again. **Unlock All Items**
-  sprays every id
-  1-3250 into that list in one shot -- there's no safe way to read the
-  game's actual catalog id list, so
-  this covers a plausible range instead of a precise one; ids that don't
-  match a real item are harmless. **Unlock Guns & Attachments** does the
-  same thing but only sprays 1-999 -- a best-effort guess at where
-  weapon/attachment ids end and skins/operators/badges begin, inferred from
-  just 4 known real ids, not a real category filter (it will still catch
-  some non-weapon items under 1000, and miss any real weapon id at 1000 or
-  above). A single-ID field is also available for a targeted unlock.
+  adds every real item in the shop catalog (2,131 ids) to that list in one
+  shot -- the exact id list (`src/item_catalog.json`), extracted offline
+  from the game's own shop data table, not a guessed range. **Unlock Guns &
+  Attachments** does the same thing but only for the 1,507 ids the game
+  itself groups under weapons/attachments, skipping skins/operators/badges.
+  A single-ID field is also available for a targeted unlock.
 - Pick any of your loadouts (count is read from the save file, not
   hardcoded).
 - **Operator**, and each of the 5 slots, has a **Change** button that opens a
@@ -171,9 +174,9 @@ after installing the mod.
   overwrite first, so it's never a one-way trip).
 
 **Game Speed tab** — Slomo control plus quick 3x speed / reset buttons.
-Also has **Player Cheats** (Kill Self, Invincible, Infinite Ammo, Teleport
-Above), reaching the game's own developer cheat menu the same way Slomo
-does — self-only, so these don't ask for confirmation the way Host tab's
+Also has **Player Cheats** (Kill Self, Invincible, Infinite Ammo),
+reaching the game's own developer cheat menu the same way Slomo does —
+self-only, so these don't ask for confirmation the way Host tab's
 match-wide actions do. **Kill Self / Invincible / Infinite Ammo are
 confirmed, via real-gameplay testing, to have no actual effect** despite
 calling with no error — left in the UI as harmless no-ops rather than

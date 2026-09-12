@@ -72,7 +72,8 @@ def _steam_library_paths():
         return []
     vdf_path = os.path.join(steam, "steamapps", "libraryfolders.vdf")
     try:
-        text = open(vdf_path, encoding="utf-8", errors="replace").read()
+        with open(vdf_path, encoding="utf-8", errors="replace") as f:
+            text = f.read()
     except OSError:
         return [steam]
     # Only the "path" value of each library entry is needed here, so a regex
@@ -135,7 +136,10 @@ def install_claude_bridge(win64):
 
     mods_txt = os.path.join(mods_dir, "mods.txt")
     line_needed = "ClaudeBridge : 1"
-    content = open(mods_txt, encoding="utf-8", errors="replace").read() if os.path.exists(mods_txt) else ""
+    content = ""
+    if os.path.exists(mods_txt):
+        with open(mods_txt, encoding="utf-8", errors="replace") as f:
+            content = f.read()
     if "ClaudeBridge" not in content:
         with open(mods_txt, "a", encoding="utf-8") as f:
             if content and not content.endswith("\n"):

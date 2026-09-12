@@ -440,16 +440,38 @@ TypeName := Name:FString  ParamCount:int32  ParamCount * TypeName   (recursive)
 `gvas2.py` walks this structure to find every property's byte region.
 Knowing where each `Size` field lives lets it change a string's length in
 place and fix up every *enclosing* property's `Size` by the same delta —
-that's what `set_rowname`/`replace_payload` do. `game_api.py` calls
-`backup_save()` before every write for exactly this reason: it's a raw
-binary patch, not a round-tripped re-serialization, so a parsing mistake on
-an unexpected save-file shape is a real risk worth having a `.backup-*`
-copy for. `backup_save()` keeps only the 20 most recent backups (pruning
-older ones on each call) so they don't accumulate forever, and the Loadout
-Editor tab's "Restore Backup..." button (`api.list_backups()` /
-`api.restore_backup()`) lets you pick one back without touching Explorer --
-restoring itself takes a fresh backup of whatever it's about to overwrite
-first, so it's never a one-way trip.
+that's what `set_rowname`/`replace_payload` do. `regions()` locates the
+start of the property list by finding the `SG_Loadout_C` class-name tag; if
+that tag isn't present (wrong file, corrupted save, an unexpected save
+format) it raises a clear `ValueError` rather than silently computing a
+bogus offset and parsing garbage as if it were real properties — every
+write path in this file, including the verification described below,
+depends on this anchor actually being found.
+
+`game_api.py`'s `set_operator()`/`set_slot_weapon()` don't write to the
+live `Loadout.sav` directly. `_apply_verified()` backs it up
+(`backup_save()`, below), edits a throwaway `.pending` copy, re-parses that
+copy and asserts the result matches exactly what the edit was supposed to
+produce (`_snapshot_loadouts()` before vs. expected vs. actual), confirms
+the live file hasn't changed on disk since the edit started (catching the
+game itself autosaving mid-edit), then does one atomic `os.replace()` and
+re-verifies the installed result one final time. Earlier this wrote
+directly and incrementally across multiple `gvas2` calls with only the
+pre-edit backup as a safety net -- a crash partway through could leave the
+save half-updated (bundle changed but not weapon, say). This closes that
+gap without changing the binary format at all.
+
+`backup_save()` keeps only the 20 most recent backups (pruning older ones
+on each call) so they don't accumulate forever, and the Loadout Editor
+tab's "Restore Backup..." button (`api.list_backups()` / `api.restore_backup()`)
+lets you pick one back without touching Explorer -- restoring itself takes
+a fresh backup of whatever it's about to overwrite first, so it's never a
+one-way trip. The backup timestamp is second-resolution, so a `-2`/`-3`/...
+suffix is appended whenever a backup lands in the same second as an earlier
+one (confirmed to happen in practice, not just theoretically -- several
+`_apply_verified()` calls in a fast sequence landed in the same second and
+would otherwise have silently overwritten each other's backup slot);
+`list_backups()` strips that suffix back out for display as `(#2)`/`(#3)`.
 
 ### 5.3 Why some data is hand-maintained (`families.json`)
 
@@ -570,7 +592,14 @@ stable for years.
   and matches `host_and_travel`'s own `private` argument exactly.
   `IsAllRoundFinish` was tried both argument-free and with an out-table and
   produced no value either way — dropped rather than shipped as a
-  permanently-`'n/a'` field.
+  permanently-`'n/a'` field. The actual Team/Stats.Kill/Death/Score/RankName
+  struct-field walk this shares with `get_lobby_roster()` (the array
+  version, via `GameMode:GetPlayerConnected`) and `get_adversary_info()`
+  (via `CheatManager:GetRandomAdversary`) lives in one place,
+  `_PC_FIELDS_LUA_HELPER`, embedded into each of the three Lua payloads
+  (can't be a Lua-side shared function since each ClaudeBridge call is
+  stateless) rather than three separately-maintained copies of the same
+  field allowlist.
 - **`get_player_roster`**: `APlayerState:GetPlayerName()` also returns an
   FString wrapper, not a plain string — same `:ToString()` fix. Doesn't
   attempt to separate real players from bots you spawned yourself (no
@@ -599,15 +628,18 @@ stable for years.
   actual hosted match, though that specific combination hasn't been
   independently tested.
 - **`kill_self`/`set_game_timer`/`end_round`/`end_match`/`set_invincible`/
-  `set_infinite_ammo`/`teleport_above`**: all thin wrappers around the
-  game's own developer `CheatManager` (`BP_BodycamCheatManager`, reached via
-  `pc.CheatManager` — the same object `SpeedTab`'s Slomo control already
-  used). `CheatEndRound` (paired with `CheatSetGameTimer(1.0)`) has a real,
-  observed effect on `get_live_state()`. **`kill_self`/`set_invincible`/
-  `set_infinite_ammo` call cleanly but have NO actual effect** — left
-  shipped as harmless no-ops rather than removed. `teleport_above`/
-  `end_match` are callable but their real effect hasn't been independently
-  re-verified either way. Also: a `UFunction` with **multiple**
+  `set_infinite_ammo`**: all thin wrappers around the game's own developer
+  `CheatManager` (`BP_BodycamCheatManager`, reached via `pc.CheatManager` —
+  the same object `SpeedTab`'s Slomo control already used). `CheatEndRound`
+  (paired with `CheatSetGameTimer(1.0)`) has a real, observed effect on
+  `get_live_state()`. **`kill_self`/`set_invincible`/`set_infinite_ammo`
+  call cleanly but have NO actual effect** — left shipped as harmless
+  no-ops rather than removed. `end_match` is callable but its real effect
+  hasn't been independently re-verified either way. (`teleport_above` was
+  also one of these wrappers but was removed after live testing confirmed
+  it reliably kills the player with no known fix — see
+  `game_api.py`'s `set_invincible()` docstring for what was ruled out.)
+  Also: a `UFunction` with **multiple**
   out-parameters (`GetScoreToWin(int32&, int32&)`) flattens all of them
   into the *first* table argument passed, not one table per parameter.
 - **`disable_perk_cooldown`**: unlike everything else in this section, this
@@ -632,12 +664,19 @@ stable for years.
   reached via `UEHelpers.GetGameInstance()`): `ActualReissadPointsScore`/
   `MaxAllowedReissadPoints` for currency, `PlayerInventoryItems` (a
   `TSet<int32>`) for item ownership. No `CheatManager`/purchase call is
-  involved. `unlock_all_items()` sprays every integer 1–3250 into
-  `PlayerInventoryItems` rather than a precise catalog id list, because
-  reading real ids from `DT_NewShopItem` crashes the game by every method
-  tried (`GetDataTableRowFromName`, `GetDataTableColumnAsString` — both via
-  `Default__DataTableFunctionLibrary`) — confirmed live and safe: ids that
-  don't correspond to a real item are inert extra set entries, not errors.
+  involved. `unlock_all_items()` adds the exact real id list from
+  `src/item_catalog.json` (2,131 ids, all four shop categories) into
+  `PlayerInventoryItems`; `unlock_weapons_and_attachments()` adds just its
+  `DT_WeaponSkins` category (1,507 ids). Reading real ids from
+  `DT_NewShopItem` *live, in-game* still crashes by every method tried
+  (`GetDataTableRowFromName`, `GetDataTableColumnAsString` — both via
+  `Default__DataTableFunctionLibrary`), which is why this used to spray a
+  guessed numeric range instead — `item_catalog.json` sidesteps that
+  entirely by reading the same table *offline*, from the game's own pak
+  files decrypted outside any live session, zero crash risk since nothing
+  touches the running game to build it. Confirmed live and safe either way:
+  ids that don't correspond to a real item are inert extra set entries, not
+  errors.
   Visually confirmed in-game (not just via a live property read) that
   `PlayerInventoryItems` membership alone is enough for the Locker/Shop UI
   to treat an item as owned — no `PlayerSkin.sav` entry needed. Also
@@ -652,12 +691,7 @@ stable for years.
   write these unlock functions make. For a permanent unlock, boost currency
   and buy for real in the Shop; use these functions for immediate,
   this-session access instead.
-  `unlock_weapons_and_attachments()` is the same spray restricted to ids
-  1–999, on the theory that weapon/attachment ids cluster below the
-  skin/operator/badge range — inferred from a sample of exactly 4 known real
-  ids (2 weapon skins under 1000, a badge and an operator skin both at or
-  above 1000), not from a read category field. Treat the 999 cutoff as a
-  guess worth revisiting, not a verified boundary.
+
 ### 5.6 The UI layer — a few non-obvious mechanisms
 
 What was originally one large `overlay_app.py` is now split into
@@ -709,7 +743,15 @@ now if it's not obvious from context.
   of raw `tk.Widget(...)`. Buttons deliberately don't hover-animate — the
   only feedback is Tk's native press state (`activebackground`, which only
   shows while physically held down) plus a hand cursor, not a custom
-  animated effect.
+  animated effect. One consequence of the strict-red rebrand worth knowing
+  if you're touching status indicators: `GOOD` and `BAD` both alias `RED`
+  now (no separate green "success" hue), so picking between them as the two
+  states of one indicator renders the same color either way -- this
+  actually happened (the connection-status dot in `overlay_app.py` was
+  `GOOD if ok else BAD` and silently showed red regardless of connection
+  state). Fixed there by using `FG` (white, "nominal") for the good state
+  instead, matching the status-bar text's own `FG`-vs-`BAD` convention --
+  the fix, not the bug, is the pattern to follow for any new status pair.
 - **Host tab's map/gamemode pickers are `ttk.Treeview`, not `Combobox`/
   `Listbox`**: both group their real entries under category header rows
   (`HostTab.CAT_*` constants — a `\x00`-prefixed sentinel iid, since that
@@ -754,5 +796,5 @@ now if it's not obvious from context.
   `_guard_other_players`**, same as Load Custom Match/Cycle/Force Round
   End — every one of them affects the whole match, not just the local
   player. Game Speed tab's Player Cheats section (Kill Self, Invincible,
-  Infinite Ammo, Teleport Above) deliberately does NOT route through it —
-  none of those force anything on anyone else.
+  Infinite Ammo) deliberately does NOT route through it — none of those
+  force anything on anyone else.
