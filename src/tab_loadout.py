@@ -136,17 +136,26 @@ class LoadoutTab(ttk.Frame):
 
         self.app.runner.run(work, done, self.app.on_error("refresh failed"))
 
-    def _set_active(self):
-        idx = self.loadout_idx
-        self.app.status(f"Selecting Loadout {idx+1} as active...")
-
-        def work():
-            return api.select_active_loadout(idx)
+    def _run(self, status_msg, work, done_msg, err_label=None, on_extra_done=None):
+        """Collapses the status/work/done/runner.run shape most of this tab's
+        simple one-shot actions share (same idea as SpeedTab's _run_cheat).
+        done_msg either replaces the status bar text directly, or (if
+        callable) is called with the result to compute it. on_extra_done, if
+        given, also runs on success with that same result (e.g. updating the
+        currency label, or _refresh() to show a just-applied change)."""
+        self.app.status(status_msg)
 
         def done(result):
-            self.app.status(f"Loadout {idx+1} active: {result}")
+            self.app.status(done_msg(result) if callable(done_msg) else done_msg)
+            if on_extra_done:
+                on_extra_done(result)
 
-        self.app.runner.run(work, done, self.app.on_error())
+        self.app.runner.run(work, done, self.app.on_error(err_label) if err_label else self.app.on_error())
+
+    def _set_active(self):
+        idx = self.loadout_idx
+        self._run(f"Selecting Loadout {idx+1} as active...", lambda: api.select_active_loadout(idx),
+                  lambda result: f"Loadout {idx+1} active: {result}")
 
     def _restore_backup(self):
         self.app.status("Loading backups...")
@@ -236,29 +245,15 @@ class LoadoutTab(ttk.Frame):
 
     def _apply_slot(self, slot_idx, bundle, item):
         idx = self.loadout_idx
-        self.app.status(f"Setting Loadout {idx+1} slot {slot_idx+1} = {item}...")
-
-        def work():
-            return api.set_slot_weapon(idx, slot_idx, item, bundle_name=bundle)
-
-        def done(_result):
-            self.app.status(f"Loadout {idx+1} slot {slot_idx+1} -> {item}")
-            self._refresh()
-
-        self.app.runner.run(work, done, self.app.on_error())
+        self._run(f"Setting Loadout {idx+1} slot {slot_idx+1} = {item}...",
+                  lambda: api.set_slot_weapon(idx, slot_idx, item, bundle_name=bundle),
+                  f"Loadout {idx+1} slot {slot_idx+1} -> {item}", on_extra_done=lambda _r: self._refresh())
 
     def _apply_operator(self, operator_name):
         idx = self.loadout_idx
-        self.app.status(f"Setting Loadout {idx+1} operator = {operator_name}...")
-
-        def work():
-            return api.set_operator(idx, operator_name)
-
-        def done(_result):
-            self.app.status(f"Loadout {idx+1} operator -> {operator_name}")
-            self._refresh()
-
-        self.app.runner.run(work, done, self.app.on_error())
+        self._run(f"Setting Loadout {idx+1} operator = {operator_name}...",
+                  lambda: api.set_operator(idx, operator_name),
+                  f"Loadout {idx+1} operator -> {operator_name}", on_extra_done=lambda _r: self._refresh())
 
     def _refresh_currency(self):
         def work():
@@ -275,17 +270,12 @@ class LoadoutTab(ttk.Frame):
         except ValueError:
             messagebox.showerror("Invalid amount", "Enter a whole number.")
             return
-        self.app.status(f"Setting Reissad Points to {amount:,}...")
-
-        def work():
-            return api.set_currency(amount)
-
-        def done(data):
-            self.currency_lbl.configure(text=f'{data["balance"]:,} / {data["cap"]:,}')
-            self.app.status(f"Reissad Points set to {data['balance']:,} "
-                             "(temporary -- resets to 40,000 on the next real currency update)")
-
-        self.app.runner.run(work, done, self.app.on_error("set currency failed"))
+        self._run(
+            f"Setting Reissad Points to {amount:,}...", lambda: api.set_currency(amount),
+            lambda data: f"Reissad Points set to {data['balance']:,} "
+                         "(temporary -- resets to 40,000 on the next real currency update)",
+            err_label="set currency failed",
+            on_extra_done=lambda data: self.currency_lbl.configure(text=f'{data["balance"]:,} / {data["cap"]:,}'))
 
     def _unlock_all_items(self):
         if not messagebox.askyesno(
@@ -297,15 +287,8 @@ class LoadoutTab(ttk.Frame):
                 "it in. There's also no undo button for this in the UI.\n\n"
                 "Proceed?"):
             return
-        self.app.status("Unlocking all items...")
-
-        def work():
-            return api.unlock_all_items()
-
-        def done(_result):
-            self.app.status("Unlock sweep complete -- check the in-game Locker/Shop.")
-
-        self.app.runner.run(work, done, self.app.on_error("unlock all failed"))
+        self._run("Unlocking all items...", api.unlock_all_items,
+                  "Unlock sweep complete -- check the in-game Locker/Shop.", err_label="unlock all failed")
 
     def _unlock_weapons(self):
         if not messagebox.askyesno(
@@ -318,15 +301,9 @@ class LoadoutTab(ttk.Frame):
                 "Items\" -- re-run it each session you want it in.\n\n"
                 "Proceed?"):
             return
-        self.app.status("Unlocking guns & attachments...")
-
-        def work():
-            return api.unlock_weapons_and_attachments()
-
-        def done(_result):
-            self.app.status("Weapons/attachments unlock sweep complete -- check the in-game Locker/Shop.")
-
-        self.app.runner.run(work, done, self.app.on_error("unlock weapons failed"))
+        self._run("Unlocking guns & attachments...", api.unlock_weapons_and_attachments,
+                  "Weapons/attachments unlock sweep complete -- check the in-game Locker/Shop.",
+                  err_label="unlock weapons failed")
 
     def _unlock_single_id(self):
         raw = self.unlock_id_var.get().strip()
@@ -334,14 +311,7 @@ class LoadoutTab(ttk.Frame):
             messagebox.showerror("Invalid ID", "Enter a whole number item ID.")
             return
         item_id = int(raw)
-        self.app.status(f"Unlocking item ID {item_id}...")
-
-        def work():
-            return api.unlock_item(item_id)
-
-        def done(_result):
-            self.app.status(f"Item ID {item_id} unlocked -- check the in-game Locker/Shop.")
-
-        self.app.runner.run(work, done, self.app.on_error("unlock failed"))
+        self._run(f"Unlocking item ID {item_id}...", lambda: api.unlock_item(item_id),
+                  f"Item ID {item_id} unlocked -- check the in-game Locker/Shop.", err_label="unlock failed")
 
 
