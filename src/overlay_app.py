@@ -31,7 +31,6 @@ from tab_saved_buttons import SavedButtonsTab
 from tab_console import ConsoleTab
 from tab_plugins import PluginsTab
 from tab_shell import ShellTab
-from tab_tablet import TabletTab
 from tab_about import AboutTab
 
 # A --windowed PyInstaller build has no console: print() output (and, in some
@@ -58,18 +57,6 @@ class App:
 
         self.runner = AsyncRunner(self.root)
 
-        # Tablet Mod payload deploy + its instant-save watcher thread -- both
-        # independent of ClaudeBridge/game-install detection below (pure local
-        # file I/O + a background thread), so they run unconditionally here
-        # rather than gating on _run_setup_check()'s result. See
-        # dev/TABLET_MOD_INTEGRATION.md. Wrapped defensively so a deploy
-        # failure (e.g. a permissions issue) never blocks the app launching.
-        try:
-            install_bridge.deploy_tablet_mods()
-            api.start_tablet_loadout_watcher()
-        except Exception:
-            logging.exception("Tablet Mod deploy/watcher startup failed")
-
         nb = ttk.Notebook(self.root)
         nb.pack(fill="both", expand=True, padx=PAD_SM, pady=(PAD_SM, 0))
         self.host_tab = HostTab(nb, self)
@@ -79,7 +66,6 @@ class App:
         self.console_tab = ConsoleTab(nb, self)
         self.plugins_tab = PluginsTab(nb, self)
         self.shell_tab = ShellTab(nb, self)
-        self.tablet_tab = TabletTab(nb, self)
         self.about_tab = AboutTab(nb, self)
         nb.add(self.host_tab, text="Host / Create Match")
         nb.add(self.loadout_tab, text="Loadout Editor")
@@ -88,7 +74,6 @@ class App:
         nb.add(self.console_tab, text="Console")
         nb.add(self.plugins_tab, text="Plugins")
         nb.add(self.shell_tab, text="Shell")
-        nb.add(self.tablet_tab, text="Bodycam Tablet")
         nb.add(self.about_tab, text="About")
 
         # Bottom status bar: one row, status text (left, expands) + a small

@@ -27,15 +27,6 @@ BUNDLED_MOD = os.path.join(HERE, "mod", "ClaudeBridge")
 UE4SS_BUNDLE = os.path.join(HERE, "ue4ss_bundle")
 UE4SS_RELEASES_URL = "https://github.com/UE4SS-RE/RE-UE4SS/releases"
 
-# The Tablet Mod's Lua payload (src/mod_tablet/) -- unlike ClaudeBridge, this
-# never touches the game install itself; it's dofile'd on demand through the
-# already-installed bridge (see game_api.reapply_tablet_mods()). Deployed to
-# AppData rather than _CONFIG_DIR's "seed once" pattern (families.json etc.)
-# because it's shipped code that should always match the installed app
-# version, not survive independent edits.
-BUNDLED_TABLET_MOD = os.path.join(HERE, "mod_tablet")
-TABLET_MODS_DIR = os.path.join(os.environ.get("LOCALAPPDATA", HERE), "BodycamOverlay", "mods")
-
 # Fallback only -- find_game_root() checks every registered Steam library
 # first (see _steam_library_paths), so this short guess-list is just a safety
 # net for a non-Steam copy or if that lookup fails for some reason.
@@ -155,34 +146,6 @@ def install_claude_bridge(win64):
                 f.write("\n")
             f.write(line_needed + "\n")
     return dest
-
-
-def deploy_tablet_mods():
-    """Copies the bundled Tablet Mod Lua payload to
-    %LOCALAPPDATA%\\BodycamOverlay\\mods\\, overwriting whatever's already
-    there (see BUNDLED_TABLET_MOD's comment for why this redeploys every
-    call instead of seeding once). Also writes bdt/game_paths.lua with the
-    detected game install's UFS manifest path, so maps-dynamic.lua doesn't
-    need a single hardcoded Steam library location -- find_game_root()
-    already knows the right one. Called once at app startup
-    (overlay_app.py); safe to call again any time (e.g. a "Redeploy" button)."""
-    if os.path.isdir(TABLET_MODS_DIR):
-        shutil.rmtree(TABLET_MODS_DIR)
-    shutil.copytree(BUNDLED_TABLET_MOD, TABLET_MODS_DIR)
-
-    manifest_path = None
-    win64 = find_game_root()
-    if win64:
-        # find_game_root() returns .../Bodycam/Bodycam/Binaries/Win64 -- the
-        # manifest lives 3 levels up, in the outer Bodycam (appmanifest) folder.
-        candidate = os.path.normpath(os.path.join(win64, "..", "..", "..", "Manifest_UFSFiles_Win64.txt"))
-        if os.path.isfile(candidate):
-            manifest_path = candidate.replace("\\", "/")
-
-    lua_value = "nil" if manifest_path is None else "'" + manifest_path.replace("'", "\\'") + "'"
-    with open(os.path.join(TABLET_MODS_DIR, "bdt", "game_paths.lua"), "w", encoding="utf-8") as f:
-        f.write(f"return {{manifest = {lua_value}}}\n")
-    return TABLET_MODS_DIR
 
 
 def ensure_setup(prompt_for_path=None, on_status=None):
