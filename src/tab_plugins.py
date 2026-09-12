@@ -18,7 +18,7 @@ _DANGEROUS_LUA = re.compile(r"\bos\.\w+|\bio\.\w+|\brequire\b|\bdofile\b|\bloads
 
 def PluginPreviewDialog(parent, plugin_name, widgets, on_confirm):
     """Shows a plugin's name and every button's label/mode/code before it's
-    actually installed. Backs up the safety note in docs/DOCUMENTATION.md §3.7
+    actually installed. Backs up the safety note in docs/DOCUMENTATION.md §4.7
     ("read a plugin's code before adding it") with something to actually
     read right here, instead of just a warning to go find the file yourself
     first."""
@@ -80,7 +80,7 @@ class PluginsTab(ttk.Frame):
                  "Installing one runs its code with no sandbox -- ClaudeBridge's Lua exposes "
                  "os.execute/io.popen, so this is arbitrary code on YOUR PC as well as the game, "
                  "not just game access. Always read the preview before confirming. Full "
-                 "reference: docs/DOCUMENTATION.md §3.",
+                 "reference: docs/DOCUMENTATION.md §4.",
         ).pack(fill="x", padx=PAD, pady=(PAD, 0))
 
         toolbar = ui.frame(self)

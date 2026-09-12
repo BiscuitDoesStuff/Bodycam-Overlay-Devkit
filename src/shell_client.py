@@ -1,5 +1,5 @@
 """Runs arbitrary shell scripts locally via Git Bash -- no sandboxing, by
-design. See docs/DOCUMENTATION.md section 2 for the full safety rationale.
+design. See docs/DOCUMENTATION.md section 2.7 for the full safety rationale.
 """
 import os
 import subprocess

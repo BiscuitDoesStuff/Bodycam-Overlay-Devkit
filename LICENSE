@@ -22,15 +22,13 @@ SOFTWARE.
 
 ---
 
-This license covers the Bodycam Overlay application code (overlay_app.py,
-game_api.py, bridge_client.py, shell_client.py, gvas2.py, install_bridge.py,
-the ClaudeBridge Lua mod under mod/, and the config JSON files).
+This license covers everything under src/ except src/ue4ss_bundle/.
 
 It does NOT cover:
-  - ue4ss_bundle/ue4ss/ -- a bundled copy of RE-UE4SS, MIT-licensed separately
-    under its own copyright (see ue4ss_bundle/ue4ss/LICENSE).
+  - src/ue4ss_bundle/ue4ss/ -- a bundled copy of RE-UE4SS, MIT-licensed
+    separately under its own copyright (see src/ue4ss_bundle/ue4ss/LICENSE).
   - Individual Plugin files (JSON files people write/share for the Plugins tab)
     -- each plugin is its own author's separate creative work. This project
     doesn't claim any license over plugin content; how a plugin's author
     chooses to license or share it is entirely up to them. See
-    1-DOCUMENTATION.md §3.6.
+    docs/DOCUMENTATION.md §4.6.

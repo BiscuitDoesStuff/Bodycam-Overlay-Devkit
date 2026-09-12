@@ -2,7 +2,7 @@
 
 Talks to the ClaudeBridge UE4SS mod (mod/ClaudeBridge/Scripts/main.lua) over
 two files under %LOCALAPPDATA%\\Temp\\<name>_bridge. Protocol shape and
-design rationale: see docs/DOCUMENTATION.md section 5.1.
+design rationale: see docs/INTERNALS.md section 5.1.
 """
 import itertools
 import os
@@ -17,7 +17,7 @@ _RESP = os.path.join(_DIR, "resp.txt")
 _TMP = os.path.join(_DIR, "req.tmp")
 
 # req.txt/resp.txt are a single slot, not a queue -- ClaudeBridge itself only
-# ever tracks one in-flight request (see docs/DOCUMENTATION.md §5.1's "busy"
+# ever tracks one in-flight request (see docs/INTERNALS.md §5.1's "busy"
 # flag). Two Python-side calls racing on _send() at the same time doesn't
 # just risk a PermissionError on the shared _TMP path (observed live) --
 # the *second* os.replace

@@ -10,7 +10,7 @@ from ui_common import ConsoleShellMixin
 
 class ShellTab(ConsoleShellMixin, ttk.Frame):
     """Runs arbitrary shell scripts locally via Git Bash -- see
-    docs/DOCUMENTATION.md §2 for the full safety rationale (no sandboxing, by
+    docs/DOCUMENTATION.md §2.7 for the full safety rationale (no sandboxing, by
     design)."""
 
     def __init__(self, parent, app):
@@ -25,7 +25,7 @@ class ShellTab(ConsoleShellMixin, ttk.Frame):
                  "same unsandboxed access as a terminal you open yourself. Use it for local "
                  "files/automation, not for touching Bodycam (that's the Console tab's job). "
                  "Alt+Up/Down replays this session's history. Full reference: "
-                 "docs/DOCUMENTATION.md §2.",
+                 "docs/DOCUMENTATION.md §2.7.",
         ).pack(fill="x", padx=PAD, pady=(PAD, 0))
 
         self.timeout_var = tk.StringVar(value="60")
