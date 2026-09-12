@@ -112,8 +112,10 @@ Button pack or Plugin? See **[community/](community)**.
 ## Credits & License
 
 Original project created by **clutch5.9**. This fork, **BDT Overlay Fork**,
-is maintained by **BiscuitDoesStuff** —
-[github.com/BiscuitDoesStuff/BDT-Overlay-Fork](https://github.com/BiscuitDoesStuff/BDT-Overlay-Fork).
+is maintained by **BiscuitDoesStuff**, **clutch5.9**, **ConocoFieldsForever** —
+- [github.com/BiscuitDoesStuff/BDT-Overlay-Fork](https://github.com/BiscuitDoesStuff/BDT-Overlay-Fork)
+- [https://github.com/CLUTCH5point9](https://github.com/CLUTCH5point9)
+- [https://github.com/ConocoFieldsForever/BDT-Overlay-Fork](https://github.com/ConocoFieldsForever/BDT-Overlay-Fork)
 
 [MIT](LICENSE) for this application's own code (everything under `src/`
 except `src/ue4ss_bundle/`), original copyright preserved as the license
