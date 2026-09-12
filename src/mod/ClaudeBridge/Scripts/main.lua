@@ -1,7 +1,7 @@
 --[[
   ClaudeBridge -- file-based RPC into a live UE4SS-modded game.
   Protocol, safety rationale, and the Python side: see docs/INTERNALS.md
-  section 5.1 in the repo root.
+  section 5.1.
 
   Install:
     <game>\Binaries\Win64\ue4ss\Mods\ClaudeBridge\Scripts\main.lua

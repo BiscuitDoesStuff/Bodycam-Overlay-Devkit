@@ -111,10 +111,9 @@ doesn't.
 ### 2.3 Game Speed
 
 Slomo: 8 presets (0.1x–5x) plus a custom value field. **Player Cheats (Kill
-Self, Invincible, Infinite Ammo) are confirmed, via real-gameplay testing,
-to have no actual effect** despite calling with no Lua error — left as
-harmless no-ops rather than removed, and a standing reminder that "the call
-didn't error" is never proof of anything. **Perk / Gadget Cooldown** is a
+Self, Invincible, Infinite Ammo) call cleanly but have no actual effect** —
+left in as harmless no-ops; see [INTERNALS §5.5](INTERNALS.md#55-game_apipy--live-game-hacks-and-why-theyre-shaped-this-way)
+for which functions and what was observed. **Perk / Gadget Cooldown** is a
 real, working Server RPC: **Clear Cooldown Now** clears whatever cooldown is
 currently running, and **Auto-Clear** repeats that on a timer, since the
 effect only clears the *current* instance rather than disabling the system —
@@ -431,4 +430,4 @@ happened because a confirmation dialog appeared and was missed — see
 | `%LOCALAPPDATA%\BodycamOverlay\overlay.log` | The overlay's own log (rotating, capped) |
 | `%LOCALAPPDATA%\Temp\bodycam_bridge\` | `req.txt`/`resp.txt` (the live RPC channel) + `bridge.log` (ClaudeBridge's own log) |
 | `<Bodycam>\Binaries\Win64\ue4ss\` | UE4SS itself + all Mods, including ClaudeBridge — the exact folder location depends on which Steam library Bodycam is installed to |
-| `<Bodycam>\Binaries\Win64\ue4ss\Mods\mods.txt` | Enabled mods. Besides `ClaudeBridge`, expects 5 UE4SS enabler mods this app relies on: `CheatManagerEnablerMod`, `ConsoleCommandsMod`, `ConsoleEnablerMod`, `BPML_GenericFunctions`, `BPModLoaderMod` |
+| `<Bodycam>\Binaries\Win64\ue4ss\Mods\mods.txt` | Enabled mods. Besides `ClaudeBridge`, expects 6 UE4SS enabler mods this app relies on: `CheatManagerEnablerMod`, `ConsoleCommandsMod`, `ConsoleEnablerMod`, `BPML_GenericFunctions`, `BPModLoaderMod`, `Keybinds` |
