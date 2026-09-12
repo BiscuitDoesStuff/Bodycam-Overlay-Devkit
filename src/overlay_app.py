@@ -261,7 +261,11 @@ class App:
                 self._first_ok = True
                 self.host_tab._refresh_weather_list()
                 self.host_tab._refresh_state()
-                self.loadout_tab._refresh_currency()
+                # Not loadout_tab._refresh_currency(): ActualReissadPointsScore
+                # is gone from the live class as of a Bodycam update (see
+                # game_api.get_currency's docstring) -- it would just throw a
+                # red status line on every launch. Manual Refresh still works
+                # (and reports the same clear error) if a fix lands later.
                 self.speed_tab._refresh_current()
             self.root.after(5000, self._poll_connection)
 

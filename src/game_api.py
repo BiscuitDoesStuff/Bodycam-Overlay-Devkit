@@ -1402,17 +1402,36 @@ return 'SelectNewCurrentLoadout({loadout_idx}) ok=' .. tostring(ok)
 # UObject property this app already writes (e.g. Loadout slot names,
 # HMS_bBotsMethod). No UFUNCTION call, no struct marshaling, so none of the
 # crash classes documented elsewhere in this file apply.
+_CURRENCY_MISSING_MSG = (
+    "ActualReissadPointsScore no longer exists on GI_BodycamSteamBackend_C -- "
+    "a Bodycam update removed it (the class now exposes FetchCurrentPlayerBalance "
+    "/ UpdatePlayerBalance instead, an async backend call, not a plain property). "
+    "Needs real re-investigation before this is wired up again -- see dev/TODO.md."
+)
+_CURRENCY_GUARD_LUA = """
+if type(gi.ActualReissadPointsScore) == 'userdata' then
+    return 'ERR:MISSING_PROPERTY'
+end"""
+
+
 def get_currency(timeout=15):
     """Reads the live Reissad Points balance and cap straight from the
     GameInstance. Confirmed live: matches what the in-game currency display
     presumably shows (not independently screen-verified, but this is the
     same field CheatGetReissadPoint's test read from, and it's the field
-    set_currency() below writes to)."""
-    lua = r"""
+    set_currency() below writes to).
+
+    As of 2026-09-12 this property is gone from the live class (see
+    _CURRENCY_MISSING_MSG) -- raises RuntimeError instead of a confusing
+    int-parse crash until that's re-investigated."""
+    lua = f"""
 local gi = UEHelpers.GetGameInstance()
+{_CURRENCY_GUARD_LUA}
 return tostring(gi.ActualReissadPointsScore) .. '|' .. tostring(gi.MaxAllowedReissadPoints)
 """
     body = bc.run_lua(lua, timeout=timeout).strip()
+    if body == "ERR:MISSING_PROPERTY":
+        raise RuntimeError(_CURRENCY_MISSING_MSG)
     balance_s, cap_s = body.split("|", 1)
     return {"balance": int(balance_s), "cap": int(cap_s)}
 
@@ -1456,11 +1475,14 @@ def set_currency(amount, timeout=15):
     amount = int(amount)
     lua = f"""
 local gi = UEHelpers.GetGameInstance()
+{_CURRENCY_GUARD_LUA}
 if {amount} > gi.MaxAllowedReissadPoints then gi.MaxAllowedReissadPoints = {amount} end
 gi.ActualReissadPointsScore = {amount}
 return tostring(gi.ActualReissadPointsScore) .. '|' .. tostring(gi.MaxAllowedReissadPoints)
 """
     body = bc.run_lua(lua, timeout=timeout).strip()
+    if body == "ERR:MISSING_PROPERTY":
+        raise RuntimeError(_CURRENCY_MISSING_MSG)
     balance_s, cap_s = body.split("|", 1)
     return {"balance": int(balance_s), "cap": int(cap_s)}
 

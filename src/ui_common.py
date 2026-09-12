@@ -154,8 +154,8 @@ def SaveButtonDialog(parent, on_save, categories=None, initial_category=""):
     a reusable button. A toggle button renders as a checkbox and injects
     `local TOGGLE_ON = true/false` ahead of the snippet's own code on every
     click, so a single saved script (checking TOGGLE_ON itself) drives both
-    states -- the same shape as the built-in bot-fill/explosive-bullets
-    toggles, just authored by whoever wrote the snippet."""
+    states -- the same shape as the built-in bot-fill toggle, just authored
+    by whoever wrote the snippet."""
     win = ui.toplevel(parent, "Save as Button")
 
     ui.label(win, text="Button name:").pack(anchor="w", padx=PAD_ML, pady=(PAD_ML, PAD_SM))
