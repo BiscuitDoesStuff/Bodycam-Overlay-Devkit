@@ -449,6 +449,24 @@ class HostTab(ttk.Frame):
 
         self.app.runner.run(work, done, err)
 
+    def _guard_then_run(self, guard_label, status_msg, work, done, err_label=None, refresh_delay=None):
+        """Confirms via _guard_other_players, then runs work() through
+        AsyncRunner -- collapses the proceed()/work()/done()/runner.run()
+        wiring every disruptive action below otherwise repeats. Pass
+        refresh_delay (ms) to schedule a Live State refresh after done()
+        runs; err_label is forwarded to self.app.on_error()."""
+        def proceed():
+            self.app.status(status_msg)
+
+            def _done(result):
+                done(result)
+                if refresh_delay is not None:
+                    self.app.root.after(refresh_delay, self._refresh_state)
+
+            self.app.runner.run(work, _done, self.app.on_error(err_label) if err_label else self.app.on_error())
+
+        self._guard_other_players(guard_label, proceed)
+
     def _load_match(self):
         name = self._selected_map()
         if not name:
@@ -481,22 +499,16 @@ class HostTab(ttk.Frame):
         private = self.private_var.get()
         bots = self.bots_var.get()
 
-        def proceed():
-            self.app.status(f"Loading {name} ({mode_name})...")
+        def done(result):
+            self.last_hosted = dict(map_path=map_path, private=private, bots=bots)
+            _save_ui_state({"map": name, "gamemode": mode_name, "cap": cap,
+                             "team": team or 1, "private": private, "bots": bots})
+            self.app.status(f"Loaded {name}: {result}")
 
-            def work():
-                return api.host_and_travel(map_path, gm_class, cap, team or 1, private, bots)
-
-            def done(result):
-                self.last_hosted = dict(map_path=map_path, private=private, bots=bots)
-                _save_ui_state({"map": name, "gamemode": mode_name, "cap": cap,
-                                 "team": team or 1, "private": private, "bots": bots})
-                self.app.status(f"Loaded {name}: {result}")
-                self.app.root.after(4000, self._refresh_state)
-
-            self.app.runner.run(work, done, self.app.on_error("ERROR loading match"))
-
-        self._guard_other_players("Loading a custom match", proceed)
+        self._guard_then_run(
+            "Loading a custom match", f"Loading {name} ({mode_name})...",
+            lambda: api.host_and_travel(map_path, gm_class, cap, team or 1, private, bots),
+            done, err_label="ERROR loading match", refresh_delay=4000)
 
     def _refresh_state(self):
         def work():
@@ -515,37 +527,22 @@ class HostTab(ttk.Frame):
         self.app.runner.run(work, done, self.app.on_error("state check failed"))
 
     def _cycle(self):
-        def proceed():
-            fallback = self.last_hosted["map_path"] if self.last_hosted else None
-            private = self.last_hosted["private"] if self.last_hosted else False
-            bots = self.last_hosted["bots"] if self.last_hosted else True
-            self.app.status("Cycling current match...")
-
-            def work():
-                return api.cycle_match(fallback_map_path=fallback, private=private, bots=bots)
-
-            def done(result):
-                self.app.status(f"Cycled: {result['mode_name']} cap={result['cap']} team={result['team_size']}")
-                self.app.root.after(4000, self._refresh_state)
-
-            self.app.runner.run(work, done, self.app.on_error("ERROR cycling"))
-
-        self._guard_other_players("Cycling the current match", proceed)
+        fallback = self.last_hosted["map_path"] if self.last_hosted else None
+        private = self.last_hosted["private"] if self.last_hosted else False
+        bots = self.last_hosted["bots"] if self.last_hosted else True
+        self._guard_then_run(
+            "Cycling the current match", "Cycling current match...",
+            lambda: api.cycle_match(fallback_map_path=fallback, private=private, bots=bots),
+            lambda result: self.app.status(
+                f"Cycled: {result['mode_name']} cap={result['cap']} team={result['team_size']}"),
+            err_label="ERROR cycling", refresh_delay=4000)
 
     def _force_end(self):
-        def proceed():
-            self.app.status("Forcing round end...")
-
-            def work():
-                return api.force_round_end()
-
-            def done(result):
-                self.app.status(f"Round end: {result}")
-                self.app.root.after(2000, self._refresh_state)
-
-            self.app.runner.run(work, done, self.app.on_error())
-
-        self._guard_other_players("Forcing the round to end", proceed)
+        self._guard_then_run(
+            "Forcing the round to end", "Forcing round end...",
+            api.force_round_end,
+            lambda result: self.app.status(f"Round end: {result}"),
+            refresh_delay=2000)
 
     def _refresh_match_info(self):
         def work():
@@ -616,68 +613,34 @@ class HostTab(ttk.Frame):
         if not name:
             messagebox.showwarning("No weather selected", "Pick a weather preset first.")
             return
-
-        def proceed():
-            self.app.status(f"Setting weather to {name}...")
-
-            def work():
-                return api.set_weather(name)
-
-            def done(_result):
-                self.app.status(f"Weather set to {name}")
-
-            self.app.runner.run(work, done, self.app.on_error("ERROR setting weather"))
-
-        self._guard_other_players(f"Changing the weather to {name}", proceed)
+        self._guard_then_run(
+            f"Changing the weather to {name}", f"Setting weather to {name}...",
+            lambda: api.set_weather(name),
+            lambda _result: self.app.status(f"Weather set to {name}"),
+            err_label="ERROR setting weather")
 
     def _set_game_timer(self):
         seconds = self.game_timer_var.get()
-
-        def proceed():
-            self.app.status(f"Setting round timer to {seconds}s...")
-
-            def work():
-                return api.set_game_timer(seconds)
-
-            def done(_result):
-                self.app.status(f"Round timer set to {seconds}s")
-                self.app.root.after(2000, self._refresh_state)
-
-            self.app.runner.run(work, done, self.app.on_error("ERROR setting timer"))
-
-        self._guard_other_players(f"Setting the round timer to {seconds}s", proceed)
+        self._guard_then_run(
+            f"Setting the round timer to {seconds}s", f"Setting round timer to {seconds}s...",
+            lambda: api.set_game_timer(seconds),
+            lambda _result: self.app.status(f"Round timer set to {seconds}s"),
+            err_label="ERROR setting timer", refresh_delay=2000)
 
     def _end_round(self):
-        def proceed():
-            self.app.status("Ending round (CheatEndRound)...")
-
-            def work():
-                return api.end_round()
-
-            def done(_result):
-                self.app.status("Round ended")
-                self.app.root.after(3000, self._refresh_state)
-
-            self.app.runner.run(work, done, self.app.on_error("ERROR ending round"))
-
-        self._guard_other_players("Ending the current round", proceed)
+        self._guard_then_run(
+            "Ending the current round", "Ending round (CheatEndRound)...",
+            api.end_round,
+            lambda _result: self.app.status("Round ended"),
+            err_label="ERROR ending round", refresh_delay=3000)
 
     def _end_match(self, victory):
         label = "Win" if victory else "Lose"
-
-        def proceed():
-            self.app.status(f"Ending match ({label})...")
-
-            def work():
-                return api.end_match(victory)
-
-            def done(_result):
-                self.app.status(f"Match ended ({label})")
-                self.app.root.after(3000, self._refresh_state)
-
-            self.app.runner.run(work, done, self.app.on_error("ERROR ending match"))
-
-        self._guard_other_players(f"Ending the match ({label})", proceed)
+        self._guard_then_run(
+            f"Ending the match ({label})", f"Ending match ({label})...",
+            lambda: api.end_match(victory),
+            lambda _result: self.app.status(f"Match ended ({label})"),
+            err_label="ERROR ending match", refresh_delay=3000)
 
     def _discover_gamemodes(self):
         """Probes for gamemode classes DT_GamemodeInfo/DT_GameModeData list
