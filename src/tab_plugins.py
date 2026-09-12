@@ -4,7 +4,7 @@ from tkinter import ttk, messagebox, filedialog
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import PAD, PAD_SM, RED
+from ui_theme import PAD, PAD_SM, RED, PAD_MD, PAD_XS
 from ui_common import make_scrollable, render_command_widgets, render_label_or_separator
 
 # Highlighted in the preview below since these are what actually make a
@@ -32,21 +32,21 @@ def PluginPreviewDialog(parent, plugin_name, widgets, on_confirm):
     inner = make_scrollable(win)
     if not widgets:
         ui.label(inner, text="(no widgets in this file)", muted=True).pack(
-            anchor="w", padx=PAD_SM + 2, pady=PAD)
+            anchor="w", padx=PAD_MD, pady=PAD)
     for spec in widgets:
         if render_label_or_separator(inner, spec):
             continue
         code = spec.get("code", "")
         mode = spec.get("mode", "run_once")
         ui.label(inner, text=f'{spec.get("label", "?")}  [{mode}]', bold=True).pack(
-            anchor="w", padx=PAD_SM + 2, pady=(PAD, 0))
+            anchor="w", padx=PAD_MD, pady=(PAD, 0))
         code_box = ui.text(inner, height=min(12, code.count("\n") + 2), wrap="none")
         code_box.insert("1.0", code)
         code_box.tag_configure("danger", foreground=RED)
         for m in _DANGEROUS_LUA.finditer(code):
             code_box.tag_add("danger", f"1.0+{m.start()}c", f"1.0+{m.end()}c")
         code_box.configure(state="disabled")
-        code_box.pack(fill="x", padx=PAD_SM + 2, pady=(PAD_SM - 2, PAD_SM))
+        code_box.pack(fill="x", padx=PAD_MD, pady=(PAD_XS, PAD_SM))
 
     def confirm():
         win.destroy()
@@ -55,7 +55,7 @@ def PluginPreviewDialog(parent, plugin_name, widgets, on_confirm):
     btn_row = ui.frame(win)
     btn_row.pack(fill="x", padx=PAD, pady=PAD)
     ui.button(btn_row, "Add Plugin", kind="accent", command=confirm).pack(side="left")
-    ui.button(btn_row, "Cancel", command=win.destroy).pack(side="left", padx=PAD_SM + 2)
+    ui.button(btn_row, "Cancel", command=win.destroy).pack(side="left", padx=PAD_MD)
     return win
 
 
@@ -87,7 +87,7 @@ class PluginsTab(ttk.Frame):
         toolbar.pack(fill="x", padx=PAD, pady=PAD)
         ui.button(toolbar, "Add Plugin...", kind="accent", command=self._add_plugin).pack(side="left")
         ui.button(toolbar, "Remove Selected Plugin", outline=True, command=self._remove_selected).pack(
-            side="left", padx=PAD_SM + 2)
+            side="left", padx=PAD_MD)
 
         self.inner_nb = ttk.Notebook(self)
         self.inner_nb.pack(fill="both", expand=True, padx=PAD, pady=(0, PAD))

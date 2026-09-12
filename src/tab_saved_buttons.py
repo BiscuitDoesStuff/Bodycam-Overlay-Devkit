@@ -4,7 +4,7 @@ from tkinter import ttk, messagebox, filedialog
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import PAD, PAD_SM, PAD_LG
+from ui_theme import PAD, PAD_SM, PAD_MD, PAD_ML, PAD_XS
 from ui_common import make_scrollable, render_command_widgets, save_cancel_row
 
 
@@ -32,8 +32,8 @@ class SavedButtonsTab(ttk.Frame):
         toolbar = ui.frame(self)
         toolbar.pack(fill="x", padx=PAD, pady=PAD)
         ui.button(toolbar, "Import...", command=self._import).pack(side="left")
-        ui.button(toolbar, "Export All...", command=self._export).pack(side="left", padx=PAD_SM + 2)
-        ui.button(toolbar, "Export Selected...", command=self._export_selected).pack(side="left", padx=PAD_SM + 2)
+        ui.button(toolbar, "Export All...", command=self._export).pack(side="left", padx=PAD_MD)
+        ui.button(toolbar, "Export Selected...", command=self._export_selected).pack(side="left", padx=PAD_MD)
         ui.label(toolbar, text="Save commands as buttons from the Console tab.", muted=True).pack(
             side="left", padx=PAD)
 
@@ -48,7 +48,7 @@ class SavedButtonsTab(ttk.Frame):
         widgets = [w for w in api.list_snippets() if w.get("widget", "button") == "button"]
         if not widgets:
             ui.label(self.inner, text="No saved buttons yet -- use 'Save as Button...' in the Console tab.",
-                     muted=True).pack(anchor="w", padx=PAD_SM + 2, pady=PAD)
+                     muted=True).pack(anchor="w", padx=PAD_MD, pady=PAD)
             return
 
         groups = {}
@@ -63,11 +63,11 @@ class SavedButtonsTab(ttk.Frame):
         for cat in ordered_cats:
             specs = groups[cat]
             header = ui.frame(self.inner)
-            header.pack(fill="x", padx=PAD_SM + 2, pady=(PAD_LG - 6, PAD_SM - 2))
+            header.pack(fill="x", padx=PAD_MD, pady=(PAD_ML, PAD_XS))
             ui.label(header, text=f'{cat or "General"}  ({len(specs)})', bold=True).pack(side="left")
             ui.button(header, "▶ Run All", command=lambda c=cat, s=list(specs): self._run_category(c, s)
                       ).pack(side="right")
-            ttk.Separator(self.inner, orient="horizontal").pack(fill="x", padx=PAD_SM + 2, pady=(0, PAD_SM - 2))
+            ttk.Separator(self.inner, orient="horizontal").pack(fill="x", padx=PAD_MD, pady=(0, PAD_XS))
             render_command_widgets(self.inner, self.app, specs, on_delete=self._delete,
                                     selection_vars=self.selection_vars,
                                     on_recategorize=self._recategorize, toggle_vars=self.toggle_vars)

@@ -5,7 +5,7 @@ from tkinter import ttk, messagebox
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import PANEL, INPUT, PAD, PAD_SM, PAD_LG
+from ui_theme import PANEL, INPUT, PAD, PAD_SM, PAD_LG, PAD_MD
 from ui_common import PickerDialog
 
 
@@ -30,12 +30,12 @@ class LoadoutTab(ttk.Frame):
         ui.label(top, text="Edit Loadout").pack(side="left")
         self.loadout_var = tk.StringVar()
         self.loadout_cb = ttk.Combobox(top, textvariable=self.loadout_var, state="readonly", width=6)
-        self.loadout_cb.pack(side="left", padx=PAD_SM + 2)
+        self.loadout_cb.pack(side="left", padx=PAD_MD)
         self.loadout_cb.bind("<<ComboboxSelected>>", self._on_loadout_change)
-        ui.button(top, "Refresh", command=self._refresh).pack(side="left", padx=PAD_SM + 2)
+        ui.button(top, "Refresh", command=self._refresh).pack(side="left", padx=PAD_MD)
         ui.button(top, "Set as Active Loadout", kind="accent", command=self._set_active).pack(
-            side="left", padx=PAD_SM + 2)
-        ui.button(top, "Restore Backup...", command=self._restore_backup).pack(side="left", padx=PAD_SM + 2)
+            side="left", padx=PAD_MD)
+        ui.button(top, "Restore Backup...", command=self._restore_backup).pack(side="left", padx=PAD_MD)
 
         ui.info_banner(
             self, title="Currency & Unlocks",
@@ -65,7 +65,7 @@ class LoadoutTab(ttk.Frame):
         cur_row.pack(fill="x", padx=PAD_SM, pady=(PAD_SM, 2))
         ui.label(cur_row, text="Reissad Points:", bold=True, bg=PANEL).pack(side="left")
         self.currency_lbl = ui.label(cur_row, text="-", bg=INPUT, anchor="w", width=16)
-        self.currency_lbl.pack(side="left", padx=PAD_SM + 2, ipady=3)
+        self.currency_lbl.pack(side="left", padx=PAD_MD, ipady=3)
         ui.button(cur_row, "Refresh", command=self._refresh_currency).pack(side="left")
         self.currency_var = tk.StringVar(value="1000000")
         ui.entry(cur_row, textvariable=self.currency_var, width=10).pack(side="left", padx=(PAD_LG, 2))
@@ -76,7 +76,7 @@ class LoadoutTab(ttk.Frame):
         ui.button(unlock_row, "Unlock All Items...", kind="accent",
                   command=self._unlock_all_items).pack(side="left")
         ui.button(unlock_row, "Unlock Guns & Attachments...",
-                  command=self._unlock_weapons).pack(side="left", padx=(PAD_SM + 2, 0))
+                  command=self._unlock_weapons).pack(side="left", padx=(PAD_MD, 0))
 
         unlock_row2 = ui.frame(unlocks, panel=True)
         unlock_row2.pack(fill="x", padx=PAD_SM, pady=(0, PAD_SM))
@@ -103,7 +103,7 @@ class LoadoutTab(ttk.Frame):
             row.pack(fill="x", pady=PAD_SM)
             ui.label(row, text=label, width=28, anchor="w").pack(side="left")
             val_lbl = ui.label(row, text="-", bg=INPUT, anchor="w", width=32)
-            val_lbl.pack(side="left", padx=PAD_SM + 2, ipady=3)
+            val_lbl.pack(side="left", padx=PAD_MD, ipady=3)
             btn = ui.button(row, "Change", command=lambda k=key: self._change(k))
             btn.pack(side="left")
             self._rows[key] = val_lbl
@@ -207,11 +207,12 @@ class LoadoutTab(ttk.Frame):
         for cat, label in self.CATEGORY_LABELS.items():
             ui.radiobutton(win, text=label, variable=cat_var, value=cat).pack(anchor="w", padx=PAD_LG)
 
-        def next_step():
+        def next_step(_evt=None):
             win.destroy()
             self._pick_bundle(slot_idx, cat_var.get())
 
         ui.button(win, "Next →", kind="accent", command=next_step).pack(pady=PAD)
+        win.bind("<Return>", next_step)
 
     def _pick_bundle(self, slot_idx, category):
         bundles = api.bundles_by_category(category)

@@ -5,7 +5,7 @@ from tkinter import ttk, messagebox
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import PAD, PAD_SM, PAD_LG
+from ui_theme import PAD, PAD_SM, PAD_LG, PAD_MD, PAD_XS
 
 
 class SpeedTab(ttk.Frame):
@@ -31,7 +31,7 @@ class SpeedTab(ttk.Frame):
         custom_frame.pack(fill="x", padx=PAD, pady=(PAD_LG, PAD_SM))
         ui.label(custom_frame, text="Custom:").pack(side="left")
         self.custom_var = tk.StringVar(value="1.0")
-        ui.entry(custom_frame, textvariable=self.custom_var, width=8).pack(side="left", padx=PAD_SM + 2)
+        ui.entry(custom_frame, textvariable=self.custom_var, width=8).pack(side="left", padx=PAD_MD)
         ui.button(custom_frame, "Set", kind="accent", command=self._set_custom_speed).pack(side="left")
 
         self.current_lbl = ui.label(self, text="Current TimeDilation: unknown", muted=True)
@@ -91,7 +91,7 @@ class SpeedTab(ttk.Frame):
                         command=self._on_auto_clear_toggle).pack(side="left")
         self.auto_clear_interval_var = tk.StringVar(value="3")
         ui.entry(perk_frame, textvariable=self.auto_clear_interval_var, width=4).pack(
-            side="left", padx=(PAD_SM - 2, 2))
+            side="left", padx=(PAD_XS, 2))
         ui.label(perk_frame, text="sec").pack(side="left")
         self.auto_clear_status_lbl = ui.label(self, text="", muted=True)
         self.auto_clear_status_lbl.pack(anchor="w", padx=PAD, pady=(0, PAD_SM))

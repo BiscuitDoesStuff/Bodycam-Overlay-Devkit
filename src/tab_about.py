@@ -1,8 +1,11 @@
 """About tab -- credits and license info."""
+import webbrowser
 from tkinter import ttk
 
 import ui_theme as ui
-from ui_theme import PAD_LG
+from ui_theme import PAD_LG, RED
+
+_FORK_URL = "https://github.com/BiscuitDoesStuff/BDT-Overlay-Fork"
 
 
 class AboutTab(ttk.Frame):
@@ -24,9 +27,13 @@ class AboutTab(ttk.Frame):
                  muted=True, wraplength=600, justify="left").pack(anchor="w", padx=PAD_LG, pady=(0, PAD_LG))
 
         ui.label(self, text="This fork", bold=True).pack(anchor="w", padx=PAD_LG, pady=(0, 2))
-        ui.label(self, text="BDT Overlay Fork, maintained by BiscuitDoesStuff --\n"
-                             "github.com/BiscuitDoesStuff/BDT-Overlay-Fork\n"
-                             "Builds on clutch5.9's original with its own improvements!",
+        ui.label(self, text="BDT Overlay Fork, maintained by BiscuitDoesStuff --",
+                 muted=True, wraplength=600, justify="left").pack(anchor="w", padx=PAD_LG)
+        url_lbl = ui.label(self, text="github.com/BiscuitDoesStuff/BDT-Overlay-Fork",
+                            fg=RED, cursor="hand2")
+        url_lbl.pack(anchor="w", padx=PAD_LG)
+        url_lbl.bind("<Button-1>", lambda e: webbrowser.open(_FORK_URL))
+        ui.label(self, text="Builds on clutch5.9's original with its own improvements!",
                  muted=True, wraplength=600, justify="left").pack(anchor="w", padx=PAD_LG, pady=(0, PAD_LG))
 
         ui.label(self, text="Third-party components:", bold=True).pack(anchor="w", padx=PAD_LG, pady=(0, 2))

@@ -12,7 +12,7 @@ from tkinter import ttk, messagebox
 
 import game_api as api
 import ui_theme as ui
-from ui_theme import BG, PANEL, ACCENT, GOOD, BAD, PAD, PAD_SM, PAD_LG
+from ui_theme import BG, PANEL, MUTED, GOOD, BAD, PAD, PAD_SM, PAD_MD, PAD_ML, PAD_XS
 
 # Small persisted "remember what I last picked" file -- Host tab restores its
 # map/gamemode/cap/team/private/bots selections from this on the next launch
@@ -86,12 +86,12 @@ class AsyncRunner:
             self.root.after(80, self._poll)
 
 
-def save_cancel_row(parent, on_save, on_cancel, pady=PAD_LG - 6):
+def save_cancel_row(parent, on_save, on_cancel, pady=PAD_ML):
     """The Save/Cancel button row shared by SaveButtonDialog below and
     SavedButtonsTab._recategorize's dialog."""
     row = ui.frame(parent)
     row.pack(pady=pady)
-    ui.button(row, "Save", kind="accent", command=on_save).pack(side="left", padx=6)
+    ui.button(row, "Save", kind="accent", command=on_save).pack(side="left", padx=PAD_MD)
     ui.button(row, "Cancel", command=on_cancel).pack(side="left")
     return row
 
@@ -158,24 +158,24 @@ def SaveButtonDialog(parent, on_save, categories=None, initial_category=""):
     toggles, just authored by whoever wrote the snippet."""
     win = ui.toplevel(parent, "Save as Button")
 
-    ui.label(win, text="Button name:").pack(anchor="w", padx=PAD_LG - 6, pady=(PAD_LG - 6, PAD_SM))
+    ui.label(win, text="Button name:").pack(anchor="w", padx=PAD_ML, pady=(PAD_ML, PAD_SM))
     name_var = tk.StringVar()
     entry = ui.entry(win, textvariable=name_var, width=32)
-    entry.pack(padx=PAD_LG - 6, fill="x")
+    entry.pack(padx=PAD_ML, fill="x")
     entry.focus_set()
 
     mode_var = tk.StringVar(value="run_once")
     ui.radiobutton(win, text="Run Once", variable=mode_var, value="run_once").pack(
-        anchor="w", padx=PAD_LG - 6, pady=(PAD_LG - 6, 0))
+        anchor="w", padx=PAD_ML, pady=(PAD_ML, 0))
     ui.radiobutton(win, text="Toggle (adds a checkbox; your code checks TOGGLE_ON)",
-                   variable=mode_var, value="toggle").pack(anchor="w", padx=PAD_LG - 6)
+                   variable=mode_var, value="toggle").pack(anchor="w", padx=PAD_ML)
 
     ui.label(win, text="Category (optional -- buttons sharing one can all be run together, "
                         "in order, from a single 'Run All'):").pack(
-        anchor="w", padx=PAD_LG - 6, pady=(PAD_LG - 6, PAD_SM))
+        anchor="w", padx=PAD_ML, pady=(PAD_ML, PAD_SM))
     category_var = tk.StringVar(value=initial_category)
     cat_combo = ttk.Combobox(win, textvariable=category_var, values=list(categories or []), width=30)
-    cat_combo.pack(padx=PAD_LG - 6, fill="x")
+    cat_combo.pack(padx=PAD_ML, fill="x")
 
     def save():
         name = name_var.get().strip()
@@ -200,10 +200,10 @@ def render_label_or_separator(parent, spec):
     kind = spec.get("widget", "button")
     if kind == "label":
         ui.label(parent, text=spec.get("label", ""), bold=True).pack(
-            anchor="w", padx=PAD_SM + 2, pady=(PAD_LG - 6, PAD_SM - 2))
+            anchor="w", padx=PAD_MD, pady=(PAD_ML, PAD_XS))
         return True
     if kind == "separator":
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=PAD_SM + 2, pady=PAD_SM + 2)
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", padx=PAD_MD, pady=PAD_MD)
         return True
     return False
 
@@ -232,11 +232,11 @@ def render_command_widgets(parent, app, widgets, on_delete=None, selection_vars=
         code = spec.get("code", "")
         mode = spec.get("mode", "run_once")
         row = ui.frame(parent)
-        row.pack(fill="x", padx=PAD_SM + 2, pady=2)
+        row.pack(fill="x", padx=PAD_MD, pady=2)
 
         if selection_vars is not None:
             sel_var = tk.BooleanVar(value=False)
-            ui.checkbutton(row, variable=sel_var).pack(side="left", padx=(0, PAD_SM + 2))
+            ui.checkbutton(row, variable=sel_var).pack(side="left", padx=(0, PAD_MD))
             selection_vars[label] = sel_var
 
         var = tk.BooleanVar(value=False) if mode == "toggle" else None
@@ -305,7 +305,7 @@ class ConsoleShellMixin:
         after it for whatever else that tab needs there (Console's Save-as-
         Button, Shell's timeout field), then Clear Output and the history hint."""
         self.input_box = ui.text(self, height=height)
-        self.input_box.pack(fill="x", padx=PAD, pady=(PAD_SM - 2, PAD_SM))
+        self.input_box.pack(fill="x", padx=PAD, pady=(PAD_XS, PAD_SM))
         self.input_box.insert("1.0", default_text)
         self._bind_history_keys()
 
@@ -314,19 +314,19 @@ class ConsoleShellMixin:
         ui.button(btn_row, "Run  (Ctrl+Enter)", kind="accent", command=self._run_from_input).pack(side="left")
         if extra_buttons:
             extra_buttons(btn_row)
-        ui.button(btn_row, "Clear Output", command=self._clear_output).pack(side="left", padx=PAD_SM + 2)
+        ui.button(btn_row, "Clear Output", command=self._clear_output).pack(side="left", padx=PAD_MD)
         ui.label(btn_row, text="Alt+Up/Down: history", muted=True).pack(side="right")
 
     def _build_output_area(self):
         ui.label(self, text="Output:").pack(anchor="w", padx=PAD, pady=(PAD, 0))
         out_frame = ui.frame(self)
-        out_frame.pack(fill="both", expand=True, padx=PAD, pady=(PAD_SM - 2, PAD))
+        out_frame.pack(fill="both", expand=True, padx=PAD, pady=(PAD_XS, PAD))
         scrollbar = ui.scrollbar(out_frame)
         scrollbar.pack(side="right", fill="y")
         self.output_box = ui.text(out_frame, yscrollcommand=scrollbar.set, state="disabled")
         self.output_box.pack(fill="both", expand=True)
         scrollbar.config(command=self.output_box.yview)
-        self.output_box.tag_configure("cmd", foreground=ACCENT)
+        self.output_box.tag_configure("cmd", foreground=MUTED)
         self.output_box.tag_configure("err", foreground=BAD)
         self.output_box.tag_configure("ok", foreground=GOOD)
 
