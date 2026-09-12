@@ -6,11 +6,12 @@ design rationale: see docs/DOCUMENTATION.md section 5.1.
 """
 import itertools
 import os
+import tempfile
 import threading
 import time
 
 BRIDGE_NAME = "bodycam"
-_DIR = os.path.join(os.environ["LOCALAPPDATA"], "Temp", f"{BRIDGE_NAME}_bridge")
+_DIR = os.path.join(os.environ.get("LOCALAPPDATA", tempfile.gettempdir()), "Temp", f"{BRIDGE_NAME}_bridge")
 _REQ = os.path.join(_DIR, "req.txt")
 _RESP = os.path.join(_DIR, "resp.txt")
 _TMP = os.path.join(_DIR, "req.tmp")
@@ -48,11 +49,12 @@ def _extract_return_value(body):
 
 
 # Just needs to differ from the immediately-previous request's id -- the Lua
-# side's own dedup (`lastId`) resets to nil on every game/mod (re)load, so
-# there's nothing to gain by persisting this across Python restarts the way
-# an earlier version did (a seq.txt file, read/parsed/rewritten on every
-# single call). An in-memory counter does the same job with no disk I/O.
-_next_id = itertools.count(1).__next__
+# side's own dedup (`lastId`) persists for the whole game session, not just
+# across a single Python run, so starting back at 1 on every overlay restart
+# risks colliding with an id the game already saw (that request would then be
+# silently dropped as a dup). Seeding from the clock instead keeps ids unique
+# across overlay restarts with no disk I/O.
+_next_id = itertools.count(int(time.time() * 1000)).__next__
 
 
 def _send(src, timeout):
@@ -75,6 +77,7 @@ def _send(src, timeout):
         os.replace(_TMP, _REQ)
 
         deadline = time.time() + timeout
+        last_stale_id = None
         while time.time() < deadline:
             if os.path.exists(_RESP):
                 try:
@@ -89,7 +92,25 @@ def _send(src, timeout):
                     if status != "OK":
                         raise BridgeError(body.strip() or f"bridge returned status {status}")
                     return body
+                # A resp.txt for some earlier (already-timed-out) request id --
+                # not ours. Left alone it gets re-read every 80ms forever.
+                # Only remove it once per distinct stale id seen (not on every
+                # single poll tick) -- Lua writes a new resp.txt via
+                # remove+rename, so removing-by-path on every tick has a real
+                # (if narrow) chance of unlinking a fresh response instead of
+                # the stale one it raced against.
+                stale_id = lines[0].strip() if lines else None
+                if stale_id != last_stale_id:
+                    last_stale_id = stale_id
+                    try:
+                        os.remove(_RESP)
+                    except OSError:
+                        pass
             time.sleep(0.08)
+        try:
+            os.remove(_REQ)
+        except OSError:
+            pass
         raise BridgeError(
             f"No response from the game within {timeout}s. Check: (1) Bodycam is running, "
             "(2) it's the same install this overlay was set up for, (3) the ClaudeBridge mod "

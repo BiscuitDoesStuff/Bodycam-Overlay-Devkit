@@ -121,7 +121,8 @@ class SpeedTab(ttk.Frame):
         self.auto_clear_status_lbl = ui.label(self, text="", muted=True)
         self.auto_clear_status_lbl.pack(anchor="w", padx=PAD, pady=(0, PAD_SM))
 
-        self._refresh_current()
+        # _refresh_current() is a game RPC -- deferred to App._poll_connection's
+        # first successful ping (see its comment for why it's not fired here).
 
     def _run_cheat(self, status_msg, api_fn, done_msg):
         """Collapses the status/work/done/runner.run shape every simple,

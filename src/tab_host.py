@@ -207,9 +207,10 @@ class HostTab(ttk.Frame):
 
         self._populate_map_tree()
         self._populate_gamemode_tree()
-        self._refresh_weather_list()
         self._apply_saved_state()
-        self._refresh_state()
+        # _refresh_weather_list()/_refresh_state() are game RPCs -- deferred to
+        # App._poll_connection's first successful ping, not fired here (see its
+        # comment: avoids a startup pile-up on bridge_client's request lock).
 
     def _populate_map_tree(self, filter_text=""):
         """Rebuilds the map tree under three real category rows (Playlist /

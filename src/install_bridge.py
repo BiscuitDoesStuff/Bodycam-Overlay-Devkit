@@ -8,6 +8,7 @@ docs/DOCUMENTATION.md section 5.4.
 Callable standalone (`python src/install_bridge.py`) or imported by overlay_app.py
 to run automatically on startup.
 """
+import filecmp
 import os
 import re
 import shutil
@@ -109,6 +110,15 @@ def has_claude_bridge(win64):
     return os.path.isdir(os.path.join(win64, "ue4ss", "Mods", "ClaudeBridge"))
 
 
+def bridge_up_to_date(win64):
+    """Compares the installed main.lua against the bundled one -- has_claude_bridge()
+    only checks the folder exists, so without this an updated ClaudeBridge from a
+    newer overlay version would never actually reach a user who installed it before."""
+    installed = os.path.join(win64, "ue4ss", "Mods", "ClaudeBridge", "Scripts", "main.lua")
+    bundled = os.path.join(BUNDLED_MOD, "Scripts", "main.lua")
+    return os.path.isfile(installed) and filecmp.cmp(bundled, installed, shallow=False)
+
+
 def deploy_ue4ss_bundle(win64):
     """Copies dwmapi.dll + the ue4ss/ folder (UE4SS.dll, settings, enabler mods)
     from ue4ss_bundle/ into the game's Binaries/Win64. These are the exact files
@@ -120,7 +130,10 @@ def deploy_ue4ss_bundle(win64):
     shutil.copy2(os.path.join(UE4SS_BUNDLE, "dwmapi.dll"), os.path.join(win64, "dwmapi.dll"))
     dest_ue4ss = os.path.join(win64, "ue4ss")
     if os.path.isdir(dest_ue4ss):
-        shutil.rmtree(dest_ue4ss)
+        bak = dest_ue4ss + ".bak"
+        if os.path.isdir(bak):
+            shutil.rmtree(bak)
+        os.replace(dest_ue4ss, bak)
     shutil.copytree(os.path.join(UE4SS_BUNDLE, "ue4ss"), dest_ue4ss)
     return True
 
@@ -155,7 +168,8 @@ def ensure_setup(prompt_for_path=None, on_status=None):
     called with human-readable progress messages.
 
     Returns a dict: {ok: bool, win64: str|None, reason: str}
-    reason is one of: 'ready', 'needs_ue4ss', 'not_found', 'installed_bridge'
+    reason is one of: 'ready', 'needs_ue4ss', 'not_found', 'installed_bridge',
+    'installed_ue4ss_and_bridge', 'updated_bridge'
     """
     def status(msg):
         if on_status:
@@ -187,6 +201,11 @@ def ensure_setup(prompt_for_path=None, on_status=None):
         status("UE4SS found. Installing the ClaudeBridge mod...")
         install_claude_bridge(win64)
         return {"ok": True, "win64": win64, "reason": "installed_bridge"}
+
+    if not bridge_up_to_date(win64):
+        status("Updating ClaudeBridge to the bundled version...")
+        install_claude_bridge(win64)
+        return {"ok": True, "win64": win64, "reason": "updated_bridge"}
 
     status("ClaudeBridge already installed.")
     return {"ok": True, "win64": win64, "reason": "ready"}

@@ -91,7 +91,8 @@ class LoadoutTab(ttk.Frame):
         self._rows = {}
         self._build_rows()
         self._load_loadout_count()
-        self._refresh_currency()
+        # _refresh_currency() is a game RPC -- deferred to App._poll_connection's
+        # first successful ping (see its comment for why it's not fired here).
 
     def _build_rows(self):
         specs = [("operator", "Operator")] + [

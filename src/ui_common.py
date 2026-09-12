@@ -68,15 +68,22 @@ class AsyncRunner:
         try:
             while True:
                 kind, payload, on_done, on_error = self.q.get_nowait()
-                if kind == "ok" and on_done:
-                    on_done(payload)
-                elif kind == "err" and on_error:
-                    on_error(payload)
-                elif kind == "err":
-                    logging.error("Unhandled async error", exc_info=payload)
+                try:
+                    if kind == "ok" and on_done:
+                        on_done(payload)
+                    elif kind == "err" and on_error:
+                        on_error(payload)
+                    elif kind == "err":
+                        logging.error("Unhandled async error", exc_info=payload)
+                except Exception:
+                    # An exception here must not escape -- it would skip the
+                    # after() below and silently stop delivering every later
+                    # async result for the rest of the app's lifetime.
+                    logging.exception("AsyncRunner on_done/on_error callback raised")
         except queue.Empty:
             pass
-        self.root.after(80, self._poll)
+        finally:
+            self.root.after(80, self._poll)
 
 
 class PickerDialog(tk.Toplevel):
