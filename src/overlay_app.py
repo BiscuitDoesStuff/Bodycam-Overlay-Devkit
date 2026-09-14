@@ -3,7 +3,7 @@ game process), toggled with the Insert key. Requires the game to run in
 windowed or borderless mode so this window can sit visually on top of it.
 
 Run with:  python src/overlay_app.py
-Requires the game to be running with the ClaudeBridge UE4SS mod loaded.
+Requires the game to be running with the GameBridge UE4SS mod loaded.
 """
 __version__ = "1.0.0"
 
@@ -162,7 +162,7 @@ class App:
         os._exit(0)
 
     def _run_setup_check(self):
-        """Runs once at startup: makes sure ClaudeBridge (and, if it's already
+        """Runs once at startup: makes sure GameBridge (and, if it's already
         on this machine, the bundled UE4SS copy) is in place before the first
         connection poll. See install_bridge.py / docs/INTERNALS.md §5.4."""
         def prompt_for_path():
@@ -207,13 +207,13 @@ class App:
             elif result["reason"] == "installed_ue4ss_and_bridge":
                 messagebox.showinfo(
                     "Setup complete",
-                    "Deployed UE4SS + ClaudeBridge. Fully restart Bodycam (not just Ctrl+R) "
+                    "Deployed UE4SS + GameBridge. Fully restart Bodycam (not just Ctrl+R) "
                     "for it to load.")
-                self.status("UE4SS + ClaudeBridge installed -- restart Bodycam.")
+                self.status("UE4SS + GameBridge installed -- restart Bodycam.")
             elif result["reason"] == "installed_bridge":
-                self.status("ClaudeBridge installed on top of existing UE4SS -- restart Bodycam if it's running.")
+                self.status("GameBridge installed on top of existing UE4SS -- restart Bodycam if it's running.")
             elif result["reason"] == "updated_bridge":
-                self.status("ClaudeBridge updated -- restart Bodycam")
+                self.status("GameBridge updated -- restart Bodycam")
             self._poll_connection()
 
         def err(e):

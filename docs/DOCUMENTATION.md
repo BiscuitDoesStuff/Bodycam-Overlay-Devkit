@@ -27,7 +27,7 @@ This section is for when something's actually broken.
 **The overlay, not the game, owns setup/repair.** Every launch,
 `install_bridge.ensure_setup()` runs once before the first connection poll:
 it finds your Bodycam install, and if UE4SS is missing there, deploys the
-bundled copy; either way it then installs or updates the ClaudeBridge mod.
+bundled copy; either way it then installs or updates the GameBridge mod.
 None of this happens on the game's side — the game only ever loads whatever
 is already sitting in its own `ue4ss/` folder.
 
@@ -36,8 +36,8 @@ broken there** (specifically: `ue4ss/Mods/shared/UEHelpers/UEHelpers.lua`
 isn't found). When that happens, the overlay renames the existing `ue4ss/`
 folder to `ue4ss.bak` first — never deletes it outright — so your other
 UE4SS mods are recoverable if something goes wrong, then deploys a fresh
-copy. The much more common case — UE4SS is fine, only ClaudeBridge itself
-changed — only touches ClaudeBridge's own subfolder; your other mods and the
+copy. The much more common case — UE4SS is fine, only GameBridge itself
+changed — only touches GameBridge's own subfolder; your other mods and the
 rest of `ue4ss/` are never touched.
 
 **If you need to force a full reset by hand:**
@@ -131,7 +131,7 @@ see [§4](#4-saved-command-buttons--plugin-file-format) for the file format.
 ### 2.5 Console
 
 Raw Lua **inside the running game process** — see
-[INTERNALS §5.1](INTERNALS.md#51-bridge-protocol-bridge_clientpy--srcmodclaudebridgescriptsmainlua)
+[INTERNALS §5.1](INTERNALS.md#51-bridge-protocol-bridge_clientpy--srcmodgamebridgescriptsmainlua)
 for the request/response round trip. Every payload runs in a `pcall` on the
 game's side, so a Lua-level error comes back as a normal message, not a
 crash — but that only covers Lua errors. A bad native call, or touching an
@@ -139,7 +139,7 @@ invalid/freed UObject, can still crash the actual game the same way any
 other UE4SS Lua mod can. **There is no sandbox.** Test one small thing at a
 time, especially before saving it as a button.
 
-Globals available in every payload (all injected by ClaudeBridge itself —
+Globals available in every payload (all injected by GameBridge itself —
 see `main.lua`'s `handle()`):
 
 | Global | What it does |
@@ -350,7 +350,7 @@ alongside it) — there's no in-app mechanism to enforce this either way.
 
 A plugin's code runs with exactly the same access as anything typed into
 the Console tab — full Lua reflection into the live game process, no
-sandbox, and (via `os.execute`/`io.open`, which ClaudeBridge's Lua exposes)
+sandbox, and (via `os.execute`/`io.open`, which GameBridge's Lua exposes)
 **arbitrary code on your PC, not just the game**. Adding someone else's
 plugin means running their code, unreviewed. Read a plugin's `code` fields
 before adding it, the same way you'd read a script before running it in a
@@ -397,7 +397,7 @@ installed/updated. See [§1](#1-setup--reset) for the full reset procedure.
 
 **Check the logs before anything else.** `%LOCALAPPDATA%\BodycamOverlayDevkit\overlay.log`
 captures the overlay's own errors (a `--windowed` build has no console to
-print to). `%LOCALAPPDATA%\Temp\bodycam_bridge\bridge.log` is ClaudeBridge's
+print to). `%LOCALAPPDATA%\Temp\bodycam_bridge\bridge.log` is GameBridge's
 own log, written from inside the game — check it if the overlay looks fine
 but nothing in-game is happening.
 
@@ -428,6 +428,6 @@ happened because a confirmation dialog appeared and was missed — see
 | `%LOCALAPPDATA%\BodycamOverlayDevkit\plugins\*.json` | Installed Plugins |
 | `%LOCALAPPDATA%\BodycamOverlayDevkit\ui_state.json` | Host tab's last-used map/gamemode/cap/team/private/bots |
 | `%LOCALAPPDATA%\BodycamOverlayDevkit\overlay.log` | The overlay's own log (rotating, capped) |
-| `%LOCALAPPDATA%\Temp\bodycam_bridge\` | `req.txt`/`resp.txt` (the live RPC channel) + `bridge.log` (ClaudeBridge's own log) |
-| `<Bodycam>\Binaries\Win64\ue4ss\` | UE4SS itself + all Mods, including ClaudeBridge — the exact folder location depends on which Steam library Bodycam is installed to |
-| `<Bodycam>\Binaries\Win64\ue4ss\Mods\mods.txt` | Enabled mods. Besides `ClaudeBridge`, expects 6 UE4SS enabler mods this app relies on: `CheatManagerEnablerMod`, `ConsoleCommandsMod`, `ConsoleEnablerMod`, `BPML_GenericFunctions`, `BPModLoaderMod`, `Keybinds` |
+| `%LOCALAPPDATA%\Temp\bodycam_bridge\` | `req.txt`/`resp.txt` (the live RPC channel) + `bridge.log` (GameBridge's own log) |
+| `<Bodycam>\Binaries\Win64\ue4ss\` | UE4SS itself + all Mods, including GameBridge — the exact folder location depends on which Steam library Bodycam is installed to |
+| `<Bodycam>\Binaries\Win64\ue4ss\Mods\mods.txt` | Enabled mods. Besides `GameBridge`, expects 6 UE4SS enabler mods this app relies on: `CheatManagerEnablerMod`, `ConsoleCommandsMod`, `ConsoleEnablerMod`, `BPML_GenericFunctions`, `BPModLoaderMod`, `Keybinds` |

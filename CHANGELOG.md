@@ -13,7 +13,7 @@ All notable changes to this project are documented here. Format follows
 ## [1.0.0] — 2026-09-12
 
 ### Changed
-- ClaudeBridge (the in-game mod) now detects when a newer version is bundled
+- GameBridge (the in-game mod) now detects when a newer version is bundled
   with the overlay and redeploys it automatically. **After updating, fully
   restart Bodycam once** so the game picks up the new mod.
 - Private matches now get a random session password each time the overlay

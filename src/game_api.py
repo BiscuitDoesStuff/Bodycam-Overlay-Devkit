@@ -476,7 +476,7 @@ return cls .. '|' .. ph .. '|' .. tostring(n) .. '|' .. tostring(mx) .. '|' .. t
 # prefix is stable across a Blueprint recompile) and used to each
 # reimplement this same field walk independently. One definition here,
 # embedded into each of those two Lua payloads (they're separate stateless
-# ClaudeBridge calls, so it can't be a Lua-side function registered once --
+# GameBridge calls, so it can't be a Lua-side function registered once --
 # this just keeps there being exactly one Python-side source of truth for
 # what "the safe PCInfo fields" means, instead of two copies that could
 # drift). `prefix` distinguishes get_match_info()'s "my_team"/"my_kills"

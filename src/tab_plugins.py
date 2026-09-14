@@ -77,7 +77,7 @@ class PluginsTab(ttk.Frame):
             self, title="Plugins — shareable button packs",
             text="A plugin is a .json file bundling Console-tab buttons/toggles someone "
                  "packaged together (same format Saved Command Buttons exports use). "
-                 "Installing one runs its code with no sandbox -- ClaudeBridge's Lua exposes "
+                 "Installing one runs its code with no sandbox -- GameBridge's Lua exposes "
                  "os.execute/io.popen, so this is arbitrary code on YOUR PC as well as the game, "
                  "not just game access. Always read the preview before confirming. Full "
                  "reference: docs/DOCUMENTATION.md §4.",

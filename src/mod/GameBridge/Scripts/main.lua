@@ -1,11 +1,11 @@
 --[[
-  ClaudeBridge -- file-based RPC into a live UE4SS-modded game.
+  GameBridge -- file-based RPC into a live UE4SS-modded game.
   Protocol, safety rationale, and the Python side: see docs/INTERNALS.md
   section 5.1.
 
   Install:
-    <game>\Binaries\Win64\ue4ss\Mods\ClaudeBridge\Scripts\main.lua
-    add "ClaudeBridge : 1" to ue4ss\Mods\mods.txt
+    <game>\Binaries\Win64\ue4ss\Mods\GameBridge\Scripts\main.lua
+    add "GameBridge : 1" to ue4ss\Mods\mods.txt
     restart the game (a NEW mod folder is not picked up by CTRL+R)
 ]]
 
@@ -28,7 +28,7 @@ do -- truncate the log once per game launch; note() below only ever appends
 end
 
 local function note(s)
-    print("[ClaudeBridge] " .. s .. "\n")
+    print("[GameBridge] " .. s .. "\n")
     local f = io.open(LOG, "a")
     if f then f:write(s .. "\n") f:close() end
 end
@@ -253,10 +253,10 @@ local function handle(id, src)
         if ok then
             if res ~= nil then body = body .. "\n-- return: " .. render(res, 0) end
             writeResp(id, true, body)
-            realPrint(string.format("[ClaudeBridge] req %s OK (%d line(s))\n", id, #buf))
+            realPrint(string.format("[GameBridge] req %s OK (%d line(s))\n", id, #buf))
         else
             writeResp(id, false, body .. "\n-- error: " .. tostring(res))
-            realPrint(string.format("[ClaudeBridge] req %s ERROR: %s\n", id, tostring(res)))
+            realPrint(string.format("[GameBridge] req %s ERROR: %s\n", id, tostring(res)))
         end
         busy = false
     end)

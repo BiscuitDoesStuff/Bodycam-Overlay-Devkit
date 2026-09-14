@@ -1,6 +1,6 @@
-"""Minimal client for the ClaudeBridge file-RPC protocol.
+"""Minimal client for the GameBridge file-RPC protocol.
 
-Talks to the ClaudeBridge UE4SS mod (mod/ClaudeBridge/Scripts/main.lua) over
+Talks to the GameBridge UE4SS mod (mod/GameBridge/Scripts/main.lua) over
 two files under %LOCALAPPDATA%\\Temp\\<name>_bridge. Protocol shape and
 design rationale: see docs/INTERNALS.md section 5.1.
 """
@@ -16,7 +16,7 @@ _REQ = os.path.join(_DIR, "req.txt")
 _RESP = os.path.join(_DIR, "resp.txt")
 _TMP = os.path.join(_DIR, "req.tmp")
 
-# req.txt/resp.txt are a single slot, not a queue -- ClaudeBridge itself only
+# req.txt/resp.txt are a single slot, not a queue -- GameBridge itself only
 # ever tracks one in-flight request (see docs/INTERNALS.md §5.1's "busy"
 # flag). Two Python-side calls racing on _send() at the same time doesn't
 # just risk a PermissionError on the shared _TMP path (observed live) --
@@ -39,7 +39,7 @@ _RETURN_MARKER = "-- return: "
 
 
 def _extract_return_value(body):
-    """ClaudeBridge appends '-- return: <value>' after any print() output when the
+    """GameBridge appends '-- return: <value>' after any print() output when the
     Lua payload ends with `return <x>`. Our payloads only care about the returned
     value, so pull just that part out (discarding any print() lines before it)."""
     idx = body.find(_RETURN_MARKER)
@@ -113,8 +113,8 @@ def _send(src, timeout):
             pass
         raise BridgeError(
             f"No response from the game within {timeout}s. Check: (1) Bodycam is running, "
-            "(2) it's the same install this overlay was set up for, (3) the ClaudeBridge mod "
-            "is listed in ue4ss/Mods/mods.txt. If ClaudeBridge was never installed, run "
+            "(2) it's the same install this overlay was set up for, (3) the GameBridge mod "
+            "is listed in ue4ss/Mods/mods.txt. If GameBridge was never installed, run "
             "install_bridge.py once, then fully restart the game."
         )
 

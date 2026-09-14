@@ -10,7 +10,7 @@ Thumbs.db
 # (src/, docs/, etc.) and commit those specifically once confirmed/finished;
 # don't commit this folder wholesale.
 /dev/
-.claude/
+
 
 # The user's own local Saved-Command-Button/Plugin exports, kept for
 # personal use -- not shared community content, never committed. See

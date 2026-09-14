@@ -1,7 +1,7 @@
-"""Setup logic for getting ClaudeBridge running in Bodycam.
+"""Setup logic for getting GameBridge running in Bodycam.
 
 Deploys the bundled ue4ss_bundle/ (if UE4SS isn't already installed) and
-mod/ClaudeBridge/ into the game's Binaries/Win64, registering the mod in
+mod/GameBridge/ into the game's Binaries/Win64, registering the mod in
 mods.txt. Design rationale for what gets bundled/deployed and why: see
 docs/INTERNALS.md section 5.4.
 
@@ -24,7 +24,7 @@ except ImportError:  # not running on Windows (e.g. this file imported for a syn
 # to a temp dir exposed as sys._MEIPASS; plain `python src/install_bridge.py` runs
 # use this file's own directory instead. Same pattern as game_api.py's _HERE.
 HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-BUNDLED_MOD = os.path.join(HERE, "mod", "ClaudeBridge")
+BUNDLED_MOD = os.path.join(HERE, "mod", "GameBridge")
 UE4SS_BUNDLE = os.path.join(HERE, "ue4ss_bundle")
 UE4SS_RELEASES_URL = "https://github.com/UE4SS-RE/RE-UE4SS/releases"
 
@@ -106,15 +106,15 @@ def has_ue4ss(win64):
     return os.path.isfile(os.path.join(ue4ss_dir, "Mods", "shared", "UEHelpers", "UEHelpers.lua"))
 
 
-def has_claude_bridge(win64):
-    return os.path.isdir(os.path.join(win64, "ue4ss", "Mods", "ClaudeBridge"))
+def has_game_bridge(win64):
+    return os.path.isdir(os.path.join(win64, "ue4ss", "Mods", "GameBridge"))
 
 
 def bridge_up_to_date(win64):
-    """Compares the installed main.lua against the bundled one -- has_claude_bridge()
-    only checks the folder exists, so without this an updated ClaudeBridge from a
+    """Compares the installed main.lua against the bundled one -- has_game_bridge()
+    only checks the folder exists, so without this an updated GameBridge from a
     newer overlay version would never actually reach a user who installed it before."""
-    installed = os.path.join(win64, "ue4ss", "Mods", "ClaudeBridge", "Scripts", "main.lua")
+    installed = os.path.join(win64, "ue4ss", "Mods", "GameBridge", "Scripts", "main.lua")
     bundled = os.path.join(BUNDLED_MOD, "Scripts", "main.lua")
     return os.path.isfile(installed) and filecmp.cmp(bundled, installed, shallow=False)
 
@@ -138,22 +138,22 @@ def deploy_ue4ss_bundle(win64):
     return True
 
 
-def install_claude_bridge(win64):
-    """Copies the bundled ClaudeBridge mod in and registers it in mods.txt.
+def install_game_bridge(win64):
+    """Copies the bundled GameBridge mod in and registers it in mods.txt.
     Assumes ue4ss/ already exists -- check has_ue4ss() first."""
     mods_dir = os.path.join(win64, "ue4ss", "Mods")
-    dest = os.path.join(mods_dir, "ClaudeBridge")
+    dest = os.path.join(mods_dir, "GameBridge")
     if os.path.isdir(dest):
         shutil.rmtree(dest)
     shutil.copytree(BUNDLED_MOD, dest)
 
     mods_txt = os.path.join(mods_dir, "mods.txt")
-    line_needed = "ClaudeBridge : 1"
+    line_needed = "GameBridge : 1"
     content = ""
     if os.path.exists(mods_txt):
         with open(mods_txt, encoding="utf-8", errors="replace") as f:
             content = f.read()
-    if "ClaudeBridge" not in content:
+    if "GameBridge" not in content:
         with open(mods_txt, "a", encoding="utf-8") as f:
             if content and not content.endswith("\n"):
                 f.write("\n")
@@ -188,7 +188,7 @@ def ensure_setup(prompt_for_path=None, on_status=None):
         status(f"UE4SS not found at {win64}\\ue4ss.")
         if deploy_ue4ss_bundle(win64):
             status("Deployed the bundled UE4SS (your own previously-installed copy).")
-            install_claude_bridge(win64)
+            install_game_bridge(win64)
             return {"ok": True, "win64": win64, "reason": "installed_ue4ss_and_bridge"}
         status("No bundled UE4SS available -- opening the official release page.")
         try:
@@ -197,17 +197,17 @@ def ensure_setup(prompt_for_path=None, on_status=None):
             pass
         return {"ok": False, "win64": win64, "reason": "needs_ue4ss"}
 
-    if not has_claude_bridge(win64):
-        status("UE4SS found. Installing the ClaudeBridge mod...")
-        install_claude_bridge(win64)
+    if not has_game_bridge(win64):
+        status("UE4SS found. Installing the GameBridge mod...")
+        install_game_bridge(win64)
         return {"ok": True, "win64": win64, "reason": "installed_bridge"}
 
     if not bridge_up_to_date(win64):
-        status("Updating ClaudeBridge to the bundled version...")
-        install_claude_bridge(win64)
+        status("Updating GameBridge to the bundled version...")
+        install_game_bridge(win64)
         return {"ok": True, "win64": win64, "reason": "updated_bridge"}
 
-    status("ClaudeBridge already installed.")
+    status("GameBridge already installed.")
     return {"ok": True, "win64": win64, "reason": "ready"}
 
 

@@ -5,7 +5,7 @@ SplitScreenMod : 0
 LineTraceMod : 0
 BPML_GenericFunctions : 1
 BPModLoaderMod : 1
-ClaudeBridge : 1
+GameBridge : 1
 
 
 

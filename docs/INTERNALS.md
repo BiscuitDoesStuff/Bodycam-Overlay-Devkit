@@ -10,7 +10,7 @@ is for people editing the code, not just running it.
 Headings keep their `5.x` numbers from when this content lived inside
 DOCUMENTATION.md, so existing source citations still resolve.
 
-## 5.1 Bridge protocol (`bridge_client.py` ↔ `src/mod/ClaudeBridge/Scripts/main.lua`)
+## 5.1 Bridge protocol (`bridge_client.py` ↔ `src/mod/GameBridge/Scripts/main.lua`)
 
 File-based RPC, chosen because it needs no open port and no extra
 dependency on either side (the game process can't accept a normal client
@@ -183,23 +183,23 @@ release page instead of guessing.
 
 `has_ue4ss()` doesn't just check the `ue4ss/` folder exists — a real
 install found live also needs `ue4ss/Mods/shared/UEHelpers/UEHelpers.lua`,
-the shared Lua library several mods (ClaudeBridge included) `require()`.
+the shared Lua library several mods (GameBridge included) `require()`.
 Without it, every such mod crashes on its first line with `module UEHelpers
 not found` — a silent, total failure that looks like a connectivity problem
 from the overlay's side rather than a missing-file one, so the check has to
 catch that specifically.
 
 `bridge_up_to_date()` compares the installed `main.lua` against the bundled
-one byte-for-byte (`filecmp.cmp`, not just checking the `ClaudeBridge/`
+one byte-for-byte (`filecmp.cmp`, not just checking the `GameBridge/`
 folder exists) — a folder-only check meant an updated mod shipped with a
 newer overlay build would never actually reach a user who'd installed an
 older version, since the folder was already there. When a full UE4SS
 redeploy is actually needed (`has_ue4ss()` fails — UE4SS itself missing or
 broken), the existing `ue4ss/` folder is renamed to `ue4ss.bak`, never
 deleted outright — a plain `shutil.rmtree()` would silently destroy any
-*other* UE4SS mods the user has installed alongside ClaudeBridge. The much
-more common case — UE4SS is fine, only ClaudeBridge changed — only replaces
-ClaudeBridge's own subfolder, never touching the rest of `ue4ss/` at all.
+*other* UE4SS mods the user has installed alongside GameBridge. The much
+more common case — UE4SS is fine, only GameBridge changed — only replaces
+GameBridge's own subfolder, never touching the rest of `ue4ss/` at all.
 
 `find_game_root()` doesn't just guess a handful of default paths — it first
 reads the Steam client's own install location from the registry
@@ -263,7 +263,7 @@ stable for years.
   struct-field walk this shares with `get_lobby_roster()` (the array
   version, via `GameMode:GetPlayerConnected`) lives in one place,
   `_PC_FIELDS_LUA_HELPER`, embedded into each Lua payload (can't be a
-  Lua-side shared function since each ClaudeBridge call is stateless)
+  Lua-side shared function since each GameBridge call is stateless)
   rather than separately-maintained copies of the same field allowlist.
   Also see §5.8: a `UFunction` with **multiple** out-parameters flattens
   all of them into the *first* table argument passed, not one table per
@@ -368,7 +368,7 @@ stable for years.
   hanging around after "Exit".
 - **Setup check on startup**: `install_bridge.ensure_setup()` runs once
   before the first connection poll, so a fresh install (or one missing
-  ClaudeBridge/UE4SS, or running a stale ClaudeBridge version) gets fixed
+  GameBridge/UE4SS, or running a stale GameBridge version) gets fixed
   automatically rather than surfacing as a confusing "not responding"
   status. `api.load_config()` runs even earlier, in `__main__` right after
   the single-instance check and logging setup — deliberately not at
@@ -427,12 +427,12 @@ stable for years.
 | `ui_common.py` | Dialogs/mixins/helpers shared by 2+ tabs |
 | `ui_theme.py` | Palette, fonts, spacing, ttk style setup, widget factories |
 | `game_api.py` | High-level API: live Lua calls (via `bridge_client`) + save-file edits (via `gvas2`) |
-| `bridge_client.py` | The file-RPC client talking to ClaudeBridge (§5.1) |
+| `bridge_client.py` | The file-RPC client talking to GameBridge (§5.1) |
 | `gvas2.py` | `Loadout.sav` binary format reader/writer (§5.2) |
 | `shell_client.py` | Runs Shell-tab scripts via Git Bash |
-| `install_bridge.py` | Finds the game, deploys UE4SS + ClaudeBridge (§5.4) |
+| `install_bridge.py` | Finds the game, deploys UE4SS + GameBridge (§5.4) |
 | `families.json`/`maps.json`/`gamemodes.json`/`item_catalog.json` | Hand-curated or extracted config (§5.3) |
-| `mod/ClaudeBridge/` | The UE4SS Lua mod this whole app talks to |
+| `mod/GameBridge/` | The UE4SS Lua mod this whole app talks to |
 | `ue4ss_bundle/` | A full bundled copy of RE-UE4SS |
 
 ## 5.8 UE4SS/Lua gotchas confirmed the hard way
@@ -533,7 +533,7 @@ else shipped with the project.
 ## 5.9 Packaging notes
 
 **`--onefile` extraction cost**: the packaged exe re-extracts its bundled
-data (JSON configs, the ClaudeBridge mod, the full UE4SS bundle) to a fresh
+data (JSON configs, the GameBridge mod, the full UE4SS bundle) to a fresh
 temp directory on every launch — accepted as the cost of shipping one
 downloadable file instead of a folder. `_HERE` (in both `game_api.py` and
 `install_bridge.py`) resolves to that extraction directory via

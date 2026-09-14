@@ -43,7 +43,7 @@ player. Use offline or in private/solo matches if you want to be sure.
    [latest Release](https://github.com/BiscuitDoesStuff/Bodycam-Overlay-Devkit/releases/latest).
 2. Run it.
 3. Press **Insert** to show the window. First launch deploys UE4SS +
-   ClaudeBridge into your Bodycam install automatically — **fully restart
+   GameBridge into your Bodycam install automatically — **fully restart
    Bodycam once** afterward (a brand-new mod folder needs a real restart,
    not Ctrl+R).
 
@@ -79,7 +79,7 @@ troubleshooting: **[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)**.
 
 ## How it works
 
-A UE4SS Lua mod (`ClaudeBridge`) runs inside the game and polls a temp
+A UE4SS Lua mod (`GameBridge`) runs inside the game and polls a temp
 folder for requests; this app writes a request, the mod runs it on the
 game's main thread, and writes back a response. One request at a time, file
 names atomically renamed into place on both sides — no open port, no extra
@@ -100,8 +100,7 @@ non-obvious design decision behind the trickier parts of the source.
 
 Issues and pull requests are welcome. There's no CI or formal style guide
 yet — keep changes focused, run `python tests/test_offline.py` before
-submitting, and see `CLAUDE.md` for the repo's own working conventions if
-you're using an AI coding assistant against it. Sharing a Saved Command
+submitting. Sharing a Saved Command
 Button pack or Plugin? See **[community/](community)**.
 
 ## Credits & License
