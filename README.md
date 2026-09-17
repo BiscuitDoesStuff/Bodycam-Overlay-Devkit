@@ -1,5 +1,3 @@
-I am leaking what I have personally on my GitHub, intended for development not pushes, so it is likely unrefined, still contains tools considered cheating, and so on.
-Here is the most recent Map Maker version I have: https://github.com/BiscuitDoesStuff/Map-Maker-Early-Leaked-
 # Bodycam Overlay & Devkit
 
 A standalone desktop control panel for **Bodycam** — **not injected into the
